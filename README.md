@@ -8,7 +8,8 @@ Cittex uses python3. No installation is needed.
 
 ## Usage. 
 As of right now, there is only command line usage supported. Usage of IPython is recommended for command completion. 
-As an example of usage, usage.py is provided.
+As an example of usage, usage.py is provided. 
+In order to use the program, the main.py script must be loaded. It will load the Publication.py script.
 
 ####Commands
 #####Open/Load/Save Library
