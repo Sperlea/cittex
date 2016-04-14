@@ -168,6 +168,7 @@ class Library(object):
             print(counter, cit.summary, "\t||\t" + cit.publication.short_identifier + "\t||\t" + cit.publication.title)
 
     def read_full_quote(self, chosen_keyword, index):
+        # TODO: irgendwie einen "schlauen" Zeilenumbruch einbauen.
         'Shows the full quote specified by the chosen keyword and the index. Chosen keyword and index must be separated by " ".'
         print("Chosen keyword: " + chosen_keyword)
         print("Summary: " + self.keywords.words[chosen_keyword][index].summary)
@@ -316,6 +317,7 @@ def read_bibtex(location):
         if "quote = {" in line or "note = {" in line:
             record.append(line.replace(",\n", "").replace("\n", ""))
         else:
+
             record.append(line.replace(",\n", "").replace("\n", "").replace(", ", ""))
         if line == "}\n" or line == "}": #line == "}" or
             if "@article" in record[0]:
