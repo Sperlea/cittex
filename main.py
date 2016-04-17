@@ -8,6 +8,7 @@
 
 import Publication
 import requests
+import textwrap
 
 class Library(object):
     def __init__(self, papers, keywords, nkeywords, loc):
@@ -47,12 +48,23 @@ class Library(object):
         else:
             print("I don't know what this is.")
             new_paper = Publication.Publication(bibtex, "READ_BIBTEX", self)
-        # TODO: Write a test that makes sure that the paper is not yet in Bibliography.papers
-        self.publications.append(new_paper)
-        self.latest_paper = new_paper
+        if not self._already_contains_publication(new_paper):
+            self.append_publication(new_paper)
+        else:
+            print("This paper is alreasy in the Library.")
+            self.latest_paper = new_paper
 
     def save(self):
         self.export_as_bibtex(self.location)
+
+    def _already_contains_publication(self, new_paper):
+        found = False
+        for piece in self.publications:
+            if piece.short_identifier == new_paper.short_identifier:
+                if piece.title.upper().replace(".", "") == new_paper.title.upper().replace(".", ""):
+                    found = True
+                    break
+        return found
 
     def export_as_bibtex(self, location):
         handle = open(location, "w")
@@ -168,14 +180,13 @@ class Library(object):
             print(counter, cit.summary, "\t||\t" + cit.publication.short_identifier + "\t||\t" + cit.publication.title)
 
     def read_full_quote(self, chosen_keyword, index):
-        # TODO: irgendwie einen "schlauen" Zeilenumbruch einbauen.
         'Shows the full quote specified by the chosen keyword and the index. Chosen keyword and index must be separated by " ".'
         print("Chosen keyword: " + chosen_keyword)
         print("Summary: " + self.keywords.words[chosen_keyword][index].summary)
         print("Keywords: " + self.keywords.words[chosen_keyword][index].keywords)
         print("Paper: " + str(self.keywords.words[chosen_keyword][index].publication))
         print("Short: " + self.keywords.words[chosen_keyword][index].publication.short_identifier)
-        print(self.keywords.words[chosen_keyword][index].text)
+        print(textwrap.fill(self.keywords.words[chosen_keyword][index].text, 100))
 
     def read_full_note(self, chosen_keyword, index):
         'Shows the full note specified by the chosen keyword and the index. Chosen keyword and index must be separated by " ".'
@@ -210,9 +221,11 @@ class Library(object):
                 new_publication = Publication.Book(None, "READ_BIBTEX_INPUT", self)
             else:
                 new_publication = Publication.Publication(None, "READ_BIBTEX_INPUT", self)
-            # TODO: Write a test that makes sure that the paper is not yet in Bibliography.papers
-            self.append_publication(new_publication)
-
+            if not self._already_contains_publication(new_publication):
+                self.append_publication(new_publication)
+            else:
+                print("This paper is already in the Library.")
+                self.latest_paper = new_publication
 
 class Citation(object):
     def __init__(self, block_of_text, publication, key, type_of_input):
@@ -267,6 +280,9 @@ class Citation(object):
         except:
             line += self.text.replace("\n", "") + "},"
         return line
+
+    def _in_list(self):
+        return "\t" + self.__repr__().replace("\n", "\n\t")
 
 
 class Note(Citation):

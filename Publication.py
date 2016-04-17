@@ -59,38 +59,16 @@ class Publication(object):
             print(i, key)
 
     def add_a_quote(self):
-        def _multi_input(prompt):
-            print(prompt)
-            input_list = []
-            while True:
-                input_str = input(">")
-                if input_str == "":
-                    break
-                else:
-                    input_list.append(input_str)
-            return " ".join(input_list)
-
         summary = input("Please input summary: ")
         keywords = input("Please input keywords, separated by ', ': ")
-        text = _multi_input("Please input quote: ")
+        text = self._multi_input("Please input quote: ")
         self._new_quote(summary, keywords, "", text)
 
     def add_a_note(self):
-        def _multi_input(prompt):
-            print(prompt)
-            input_list = []
-            while True:
-                input_str = input(">")
-                if input_str == "":
-                    break
-                else:
-                    input_list.append(input_str)
-            return " ".join(input_list)
-
         summary = input("Please input summary: ")
         keywords = input("Please input keywords, separated by ', ': ")
-        text = _multi_input("Please input quote: ")
-        self._new_note(summary, keywords, "", text)
+        text = self._multi_input("Please input quote: ")
+        self._new_note(summary, keywords, text)
 
     def _lookup_short_identifier(self):
         if self.bibtex:
@@ -198,7 +176,7 @@ class Publication(object):
 
     def _add_notes_from_bibtex(self, array_of_notes):
         for q in array_of_notes:
-            self._new_note(q.split("__")[0], q.split("__")[1], "", q.split("__")[2])
+            self._new_note(q.split("__")[0], q.split("__")[1], q.split("__")[2])
 
     def as_bibtex_with_quotes(self):
         if self.bibtex:
@@ -227,8 +205,8 @@ class Publication(object):
         new_quote = main.Citation([" ", summary, keywords, pages, text], self, self.Biblio.keywords, "USER")
         self.quotes.append(new_quote)
 
-    def _new_note(self, summary, keywords, pages, text):
-        new_note = main.Note([" ", summary, keywords, pages, text], self, self.Biblio.note_keywords, "USER")
+    def _new_note(self, summary, keywords, text):
+        new_note = main.Note([" ", summary, keywords, text], self, self.Biblio.note_keywords, "USER")
         self.notes.append(new_note)
 
     def _multi_input(self, prompt):
@@ -241,6 +219,27 @@ class Publication(object):
             else:
                 input_list.append(input_str)
         return " ".join(input_list)
+
+    def remove_note(self, index_of_note):
+        new_list_of_notes = []
+        for i, note in enumerate(self.notes):
+            if i == index_of_note:
+                erase_this = (input("Do you really want to erase the note \"" + self.notes[i].summary + "\"? (y/n)" ) == "y")
+                if not erase_this:
+                    new_list_of_notes.append(note)
+            else:
+                new_list_of_notes.append(note)
+        self.notes = new_list_of_notes
+
+    def list_notes(self):
+        for i, note in enumerate(self.notes):
+            print(i, note._in_list())
+
+    def list_quotes(self):
+        for i, quote in enumerate(self.quotes):
+            print(i, quote._in_list())
+
+
 
 class Article(Publication):
 
@@ -305,12 +304,6 @@ class Article(Publication):
         keywords = input("Please input keywords, separated by ', ': ")
         text = self._multi_input("Please input quote: ")
         self._new_quote(summary, keywords, "", text)
-
-    def add_a_note(self):
-        summary = input("Please input summary: ")
-        keywords = input("Please input keywords, separated by ', ': ")
-        text = self._multi_input("Please input quote: ")
-        self._new_note(summary, keywords, "", text)
 
     def _bibtex_from_user_input(self):
         self.fields = {"title": input("Title of the paper: "),
@@ -398,13 +391,6 @@ class Book(Publication):
         pages = input("Pages of the quote, separated by '--': ")
         text = self._multi_input("Please input quote: ")
         self._new_quote(summary, keywords, pages, text)
-
-    def add_a_note(self):
-        summary = input("Please input summary: ")
-        keywords = input("Please input keywords, separated by ', ': ")
-        pages = input("Pages of the quote, separated by '--': ")
-        text = self._multi_input("Please input quote: ")
-        self._new_note(summary, keywords, pages, text)
 
     def _bibtex_from_user_input(self):
         self.fields = {"title": input("Title of the book: "),
