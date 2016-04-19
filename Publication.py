@@ -1,5 +1,9 @@
 import main
+import unicodedata
+import difflib
+from collections import Counter
 
+# TODO: man sollte mal alle vorhandenen quotes nach keyword-duplikate durchsuchen
 class Publication(object):
     # TODO: Make it easily possible to change the information of a given quote/note!
     def __init__(self, value, type_of_input, biblio):
@@ -239,6 +243,78 @@ class Publication(object):
         for i, quote in enumerate(self.quotes):
             print(i, quote._in_list())
 
+##from here on, this is more experimental
+
+    def add_a_quote_complex(self):
+        # This is a more elaborate function to add quotes to the Publication - with an easy spelling corrector. These
+        # additions make it neccesary to add the keywords one-by-one.
+        summary = input("Please input summary: ")
+        more_keywords = True
+        keywords = []
+        while more_keywords:
+            new_keyword = input("Please input one keyword or leave empty: ")
+            new_keyword = self._keyword_wrong_case(new_keyword)
+            if new_keyword == "":
+                more_keywords = False
+            else:
+                keywords.append(new_keyword)
+
+            try:
+                predicted_keyword = self._predict_next_keyword(new_keyword)
+                if predicted_keyword:
+                    keywords.append(predicted_keyword)
+            except KeyError:
+                None
+
+        keywords = list(set(keywords))
+        text = self._multi_input("Please input quote: ")
+        self._new_quote(summary, ", ".join(keywords), "", text)
+
+    def _keyword_wrong_case(self, keyword):
+        # TODO: Move this into the object citation? It would make it hard to work with a GUI later...
+        for word in self.Biblio.keywords.words:
+            if keyword != word and caseless_equal(keyword, word):
+                answer = input("You typed \"" + keyword + "\", but do you mean \"" + word + "\"? (y/n)  ")
+                if answer.lower() == "y":
+                    return word
+                else:
+                    return keyword
+        else:
+            return keyword
+
+    def _keyword_similar(self, keyword):
+        for word in self.Biblio.keywords.words:
+            difference = sum([i[0] != ' '  for i in difflib.ndiff(keyword, word)]) / 2
+            if difference < 3:
+                answer = input("You typed \"" + keyword + "\", but do you mean \"" + word + "\"? (y/n)  ")
+                if answer.lower() == "y":
+                    return word
+                else:
+                    return keyword
+        else:
+            return keyword
+
+    def _predict_next_keyword(self, query_keyword):
+        size = len(self.Biblio.keywords.words[query_keyword])
+        all_keywords = []
+        for cit in self.Biblio.keywords.words[query_keyword]:
+            for word in cit.keywords.split(", "):
+                all_keywords.append(word)
+
+        word_counter = Counter(all_keywords)
+        if word_counter[sorted(word_counter, key=word_counter.__getitem__)[-2]] > size / 3:
+            use_predicted_word = (
+                input("Do you want to add the keyword \"" + word_counter.most_common(2)[1][0] + "\"" + "? (y/n) " ).lower()
+                == "y")
+            if use_predicted_word:
+                return word_counter.most_common(2)[1][0]
+            else:
+                return None
+        else:
+            return None #is falsy, so you could just check for the output of this function with an easy if clause
+
+def caseless_equal(left, right):
+    return unicodedata.normalize("NFKD", left.casefold()) == unicodedata.normalize("NFKD", right.casefold())
 
 
 class Article(Publication):
@@ -298,12 +374,6 @@ class Article(Publication):
             self._add_quotes_from_bibtex(self.fields["quote"])
         if "note" in self.fields:
             self._add_notes_from_bibtex(self.fields["note"])
-
-    def add_a_quote(self):
-        summary = input("Please input summary: ")
-        keywords = input("Please input keywords, separated by ', ': ")
-        text = self._multi_input("Please input quote: ")
-        self._new_quote(summary, keywords, "", text)
 
     def _bibtex_from_user_input(self):
         self.fields = {"title": input("Title of the paper: "),
