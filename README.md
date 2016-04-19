@@ -9,7 +9,8 @@ Cittex uses python3. No installation is needed.
 ## Usage. 
 As of right now, there is only command line usage supported. Usage of IPython is recommended for command completion. 
 As an example of usage, usage.py is provided. 
-In order to use the program, the main.py script must be loaded. It will load the Publication.py script.
+In order to use the program, the main.py script must be loaded. It will load the Publication.py script. 
+lit.bib is provided as an example for the format in which the data will be stored.
 
 ####Commands
 #####Open/Load/Save Library
@@ -51,4 +52,12 @@ In order to use the program, the main.py script must be loaded. It will load the
 
 *list_keywords()* and *list_note_keywords()* -- Lists the keywords for the quotes or the notes for this publication.
 
-*add_a_quote()* and *add_a_note()* -- Adds a quote or note to the paper. 
+*add_a_quote()* and *add_a_note()* -- Adds a quote or note to the publication. 
+
+*add_a_quote_complex()* -- Adds a quote to the publication, has some extended functionality. Because the keywords are added one-by-one, this function can perform some very simple spelling correction based on the keywords already added to Publications in the Library. In the future, this will replace the regular add_a_quote() function, but I want to add a keyword prediction first.
+
+*list_notes()* -- Prints a list of the notes to the terminal in a nicer format. 
+
+*list_quotes()* -- Prints a list of the quotes to the terminal in a nicer format. 
+
+*remove_note(index_of_note)* -- Notes can grow irrelevant, so you should be able to erase them - this is a first attempt in that direction.
