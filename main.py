@@ -9,6 +9,7 @@
 import Publication
 import requests
 import textwrap
+import unicodedata
 
 class Library(object):
     def __init__(self, papers, keywords, nkeywords, loc):
@@ -349,3 +350,7 @@ def read_bibtex(location):
 
 def open_empty_library(location = None, key = Keywords(), nkey = Note_Keywords()):
     return Library([], key, nkey, location)
+
+
+def caseless_equal(left, right):
+    return unicodedata.normalize("NFKD", left.casefold()) == unicodedata.normalize("NFKD", right.casefold())
