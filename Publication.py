@@ -6,15 +6,16 @@ from collections import Counter
 # TODO: man sollte mal alle vorhandenen quotes nach keyword-duplikate durchsuchen
 class Publication(object):
     # TODO: Make it easily possible to change the information of a given quote/note!
-    def __init__(self, value, type_of_input, biblio):
+
+    def __init__(self, value, type_of_input, biblio, required, optional):
         self.Biblio = biblio
         self.quotes = []
         self.notes = []
-        if type_of_input == "DOI":
-            self.doi = value
-            self._create_from_bibtex(self._get_bibtex_from_internet(), "")
-            self.short_identifier = self._lookup_short_identifier()
-        elif type_of_input == "READ_BIBTEX":
+
+        self.required_fields = required
+        self.optional_fields = optional
+
+        if type_of_input == "READ_BIBTEX":
             self._create_from_bibtex(value)
             self.short_identifier = self._lookup_short_identifier()
         elif type_of_input == "READ_BIBTEX_INPUT":
@@ -63,10 +64,17 @@ class Publication(object):
             print(i, key)
 
     def add_a_quote(self):
-        summary = input("Please input summary: ")
-        keywords = input("Please input keywords, separated by ', ': ")
-        text = self._multi_input("Please input quote: ")
-        self._new_quote(summary, keywords, "", text)
+        if self.is_booklike:
+            summary = input("Please input summary: ")
+            keywords = input("Please input keywords, separated by ', ': ")
+            text = self._multi_input("Please input quote: ")
+            self._new_quote(summary, keywords, "", text)
+        else:
+            summary = input("Please input summary: ")
+            keywords = input("Please input keywords, separated by ', ': ")
+            pages = input("Pages of the quote, separated by '--': ")
+            text = self._multi_input("Please input quote: ")
+            self._new_quote(summary, keywords, pages, text)
 
     def add_a_note(self):
         summary = input("Please input summary: ")
@@ -82,89 +90,48 @@ class Publication(object):
             return None
 
     def _bibtex_from_user_input(self):
-        self.type_of_publication = input("Type of publication.")
-        self.fields = {"title": input("Title of the paper: "),
-                      # Authors need to be in the format $Lastname$, $initials of first names$ and $next_lastname$ etc.
-                      "author": input("Names of the authors, separated by ' and ': "),
-                      "year": input("Year of publication: "),
-                      "journal": input("Name of journal: "),
-                      "volume": input("Volume of the issue: "),
-                      "number": input("Number of the issue: "),
-                      "pages": input("Page numbers the article is on, separated by '--': "),
-                      "doi": "None",
-                      }
+        self.fields = {}
+        for reqfield in self.required_fields:
+            self.fields[reqfield] = input(reqfield + ": ")
+
+        for optfield in self.optional_fields:
+            answer = input(optfield + " or 'n' to skip: ")
+            if answer != "n" and answer != "":
+                self.fields[optfield] = answer
 
         first_author = self.fields["author"].split(" and ")[0]
         shortie = (first_author.split(" ")[len(first_author.split(" "))-1] + "_" + self.fields["year"])
 
-        self.bibtex = "@" + self.type_of_publication + "{" + shortie + ",\n"
+        self.bibtex = "@" + self.type_of_publication + "{" + shortie + "\n"
         for i, __ in enumerate(list(self.fields.values())):
-            self.bibtex += "\t" + list(self.fields.keys())[i] + " = {" + list(self.fields.values())[i] + "},\n"
+            self.bibtex += "\t" + list(self.fields.keys())[i] + " = {" + list(self.fields.values())[i] + "}\n"
         self.bibtex += "}"
 
     def _create_from_bibtex(self, value):
-
-        def dict_to_fields():
-            self.title = self.fields["title"][0]
-            self.year = self.fields["year"][0]
-            self.authors = self.fields["author"][0]
-            value[len(value)-1] = value[len(value)-1].replace("\n}", ",\n}")
-            self.bibtex = self._bibtex_from_record_without_quotes(",\n".join(value))
-            self.journal = self.fields["journal"][0]
-            try:
-                self.volume = self.fields["volume"][0]
-            except:
-                self.volume = ""
-            try:
-                self.number = self.fields["number"][0]
-            except:
-                self.number = ""
-            try:
-                self.pages = self.fields["pages"][0]
-            except:
-                self.pages = ""
-            self.doi = self.fields["doi"][0]
-
         if value[0] == "@":
             value = value.split("\n")
-        self.type_of_publication = value[0].split("{")[0].replace("@", "")
         self.short_identifier = value[0].split("{")[1].split(",")[0]
+        self.fields = {}
+        for line in value:
+            if " = " in line:
+                key = line.split(" = ")[0].replace("\t", "")
+                val = line.split(" = ")[1].replace("{", "").replace("}", "")
+                if val[len(val)-1] == ",":
+                    val = val[:len(val)-1]
+                if key in self.fields:
+                    self.fields[key].append(val)
+                else:
+                    self.fields[key] = [val]
 
-        try:
-            self.title = self.fields["title"]
-            self.year = self.fields["year"]
-            self.authors = self.fields["author"]
-            self.journal = self.fields["journal"]
-            try:
-                self.volume = self.fields["volume"]
-            except:
-                self.volume = ""
-            try:
-                self.number = self.fields["number"]
-            except:
-                self.number = ""
-            try:
-                self.pages = self.fields["pages"]
-            except:
-                self.pages = ""
-            self.doi = "None"
-        except:
-            self.fields = {}
-            for line in value:
-                if " = " in line:
-                    key = line.split(" = ")[0].replace("\t", "")
-                    val = line.split(" = ")[1].replace("{", "").replace("}", "")
-                    if val[len(val)-1] == ",":
-                        val = val[:len(val)-1]
-                    if key in self.fields:
-                        self.fields[key].append(val)
-                    else:
-                        self.fields[key] = [val]
-        dict_to_fields()
+        for field in self.required_fields:
+            if field == "author":
+                setattr(self, "authors", self.fields[field][0])
+            else:
+                setattr(self, field, self.fields[field][0])
 
+        self.bibtex = self._bibtex_from_record_without_quotes(",\n".join(value))
         if "quote" in self.fields:
             self._add_quotes_from_bibtex(self.fields["quote"])
-
         if "note" in self.fields:
             self._add_notes_from_bibtex(self.fields["note"])
 
@@ -175,8 +142,12 @@ class Publication(object):
         return nv
 
     def _add_quotes_from_bibtex(self, array_of_quotes):
-        for q in array_of_quotes:
-            self._new_quote(q.split("__")[0], q.split("__")[1], "", q.split("__")[2])
+        if self.is_booklike:
+            for q in array_of_quotes:
+                self._new_quote(q.split("__")[0], q.split("__")[1], q.split("__")[2], q.split("__")[3])
+        else:
+            for q in array_of_quotes:
+                self._new_quote(q.split("__")[0], q.split("__")[1], "", q.split("__")[2])
 
     def _add_notes_from_bibtex(self, array_of_notes):
         for q in array_of_notes:
@@ -253,10 +224,12 @@ class Publication(object):
         keywords = []
         while more_keywords:
             new_keyword = input("Please input one keyword or leave empty: ")
-            new_keyword = self._keyword_wrong_case(new_keyword)
+
             if new_keyword == "":
                 more_keywords = False
             else:
+                new_keyword = self._keyword_wrong_case(new_keyword)
+                new_keyword = self._keyword_similar(new_keyword)
                 keywords.append(new_keyword)
 
             try:
@@ -268,29 +241,35 @@ class Publication(object):
 
         keywords = list(set(keywords))
         text = self._multi_input("Please input quote: ")
-        self._new_quote(summary, ", ".join(keywords), "", text)
+        if self.is_booklike:
+            pages = input("Pages of the quote, separated by '--': ")
+            self._new_quote(summary, ", ".join(keywords), pages, text)
+        else:
+            self._new_quote(summary, ", ".join(keywords), "", text)
 
     def _keyword_wrong_case(self, keyword):
-        # TODO: Move this into the object citation? It would make it hard to work with a GUI later...
-        for word in self.Biblio.keywords.words:
-            if keyword != word and caseless_equal(keyword, word):
-                answer = input("You typed \"" + keyword + "\", but do you mean \"" + word + "\"? (y/n)  ")
-                if answer.lower() == "y":
-                    return word
-                else:
-                    return keyword
+        words = [word for word in self.Biblio.keywords.words if keyword != word and caseless_equal(keyword, word)]
+
+        if words:
+            answer = input("You typed \"" + keyword + "\", but do you mean \"" + words[0] + "\"? (y/n)  ")
+            if answer.lower() == "y":
+                return words[0]
+            else:
+                return keyword
         else:
             return keyword
 
     def _keyword_similar(self, keyword):
-        for word in self.Biblio.keywords.words:
-            difference = sum([i[0] != ' '  for i in difflib.ndiff(keyword, word)]) / 2
-            if difference < 3:
-                answer = input("You typed \"" + keyword + "\", but do you mean \"" + word + "\"? (y/n)  ")
-                if answer.lower() == "y":
-                    return word
-                else:
-                    return keyword
+        sorted_words = sorted([word for word in self.Biblio.keywords.words],
+                              key = lambda x: sum([i[0] != ' ' for i in difflib.ndiff(keyword, x)]) / 2)
+        relevant_word = sorted_words[0]
+
+        if sum([i[0] != ' ' for i in difflib.ndiff(keyword, relevant_word)]) / 2 < 3:
+            answer = input("You typed \"" + keyword + "\", but do you mean \"" + relevant_word + "\"? (y/n)  ")
+            if answer.lower() == "y":
+                return relevant_word
+            else:
+                return keyword
         else:
             return keyword
 
@@ -298,11 +277,12 @@ class Publication(object):
         size = len(self.Biblio.keywords.words[query_keyword])
         all_keywords = []
         for cit in self.Biblio.keywords.words[query_keyword]:
-            for word in cit.keywords.split(", "):
-                all_keywords.append(word)
+            words = [word for word in cit.keywords.split(", ") if word != query_keyword]
+            all_keywords.extend(words)
 
         word_counter = Counter(all_keywords)
-        if word_counter[sorted(word_counter, key=word_counter.__getitem__)[-2]] > size / 3:
+
+        if word_counter[sorted([w for w in word_counter], key = lambda x: word_counter[x])[::-1][0]] > size / 3:
             use_predicted_word = (
                 input("Do you want to add the keyword \"" + word_counter.most_common(2)[1][0] + "\"" + "? (y/n) " ).lower()
                 == "y")
@@ -313,174 +293,39 @@ class Publication(object):
         else:
             return None #is falsy, so you could just check for the output of this function with an easy if clause
 
+
 def caseless_equal(left, right):
     return unicodedata.normalize("NFKD", left.casefold()) == unicodedata.normalize("NFKD", right.casefold())
 
 
 class Article(Publication):
-
     def __init__(self, value, type_of_input, biblio):
         self.type_of_publication = "article"
-        self.Biblio = biblio
-        self.quotes = []
-        self.notes = []
-        if type_of_input == "READ_BIBTEX":
-            self._create_from_bibtex(value)
-            self.short_identifier = self._lookup_short_identifier()
-        elif type_of_input == "READ_BIBTEX_INPUT":
-            self._bibtex_from_user_input()
-            self._create_from_bibtex(self.bibtex)
-            self.short_identifier = self._lookup_short_identifier()
+        self.is_booklike = False
 
-    def _create_from_bibtex(self, value):
-
-        def dict_to_fields():
-            self.title = self.fields["title"][0]
-            self.year = self.fields["year"][0]
-            self.authors = self.fields["author"][0]
-            value[len(value)-1] = value[len(value)-1].replace("\n}", ",\n}")
-            self.journal = self.fields["journal"][0]
-            try:
-                self.volume = self.fields["volume"][0]
-            except:
-                self.volume = ""
-            try:
-                self.number = self.fields["number"][0]
-            except:
-                self.number = ""
-            try:
-                self.pages = self.fields["pages"][0]
-            except:
-                self.pages = ""
-            self.doi = self.fields["doi"][0]
-
-        if value[0] == "@":
-            value = value.split("\n")
-        self.short_identifier = value[0].split("{")[1].split(",")[0]
-        self.fields = {}
-        for line in value:
-            if " = " in line:
-                key = line.split(" = ")[0].replace("\t", "")
-                val = line.split(" = ")[1].replace("{", "").replace("}", "")
-                if val[len(val)-1] == ",":
-                    val = val[:len(val)-1]
-                if key in self.fields:
-                    self.fields[key].append(val)
-                else:
-                    self.fields[key] = [val]
-        dict_to_fields()
-        self.bibtex = self._bibtex_from_record_without_quotes(",\n".join(value))
-        if "quote" in self.fields:
-            self._add_quotes_from_bibtex(self.fields["quote"])
-        if "note" in self.fields:
-            self._add_notes_from_bibtex(self.fields["note"])
-
-    def _bibtex_from_user_input(self):
-        self.fields = {"title": input("Title of the paper: "),
-                    # Authors need to be in the format $Lastname$, $initials of first names$ and $next_lastname$ etc.
-                      "author": input("Names of the authors, separated by ' and ': "),
-                      "year": input("Year of publication: "),
-                      "journal": input("Name of journal: "),
-                      "volume": input("Volume of the issue: "),
-                      "number": input("Number of the issue: "),
-                      "pages": input("Page numbers the article is on, separated by '--': "),
-                        "doi": "None",
-        }
-
-        first_author = self.fields["author"].split(" and ")[0]
-        shortie = (first_author.split(" ")[len(first_author.split(" "))-1] + "_" + self.fields["year"])
-
-        self.bibtex = "@" + self.type_of_publication + "{" + shortie + ",\n"
-        for i, __ in enumerate(list(self.fields.values())):
-            self.bibtex += "\t" + list(self.fields.keys())[i] + " = {" + list(self.fields.values())[i] + "},\n"
-        self.bibtex += "}"
+        super(Article, self).__init__(value, type_of_input, biblio, ["author", "title", "journal", "year"],
+                                            ["volume", "number", "pages", "month"])
 
 class Book(Publication):
     def __init__(self, value, type_of_input, biblio):
         self.type_of_publication = "book"
-        self.Biblio = biblio
-        self.quotes = []
-        self.notes = []
-        if type_of_input == "READ_BIBTEX":
-            self._create_from_bibtex(value)
-            self.short_identifier = self._lookup_short_identifier()
-            #print(self.bibtex)
-        elif type_of_input == "READ_BIBTEX_INPUT":
-            self._bibtex_from_user_input()
-            self._create_from_bibtex(self.bibtex)
-            self.short_identifier = self._lookup_short_identifier()
+        self.is_booklike = True
 
-    def _create_from_bibtex(self, value):
-        def dict_to_fields():
-            self.title = self.fields["title"][0]
-            self.year = self.fields["year"][0]
-            self.authors = self.fields["author"][0]
-            self.publisher = self.fields["publisher"][0]
-            try:
-                self.editor = self.fields["editor"][0]
-            except:
-                self.editor = ""
-            try:
-                self.volume = self.fields["volume"][0]
-            except:
-                self.volume = ""
-            try:
-                self.number = self.fields["number"][0]
-            except:
-                self.number = ""
-            try:
-                self.edition = self.fields["edition"][0]
-            except:
-                self.edition = ""
-            self.doi = self.fields["doi"][0]
+        super(Book, self).__init__(value, type_of_input, biblio, ["author", "title", "publisher", "year"],
+                                            ["volume", "series", "address", "edition", "month", "key"])
 
-        if value[0] == "@":
-            value = value.split("\n")
-        self.short_identifier = value[0].split("{")[1].split(",")[0]
-        self.fields = {}
-        for line in value:
-            if " = " in line:
-                key = line.split(" = ")[0].replace("\t", "")
-                val = line.split(" = ")[1].replace("{", "").replace("}", "")
-                if val[len(val)-1] == ",":
-                    val = val[:len(val)-1]
-                if key in self.fields:
-                    self.fields[key].append(val)
-                else:
-                    self.fields[key] = [val]
-        dict_to_fields()
-        self.bibtex = self._bibtex_from_record_without_quotes(",\n".join(value))
-        if "quote" in self.fields:
-            self._add_quotes_from_bibtex(self.fields["quote"])
-        if "note" in self.fields:
-            self._add_notes_from_bibtex(self.fields["note"])
+class InProceedings(Publication):
+    def __init__(self, value, type_of_input, biblio):
+        self.type_of_publication = "InProceedings"
+        self.is_booklike = False
 
-    def add_a_quote(self):
-        summary = input("Please input summary: ")
-        keywords = input("Please input keywords, separated by ', ': ")
-        pages = input("Pages of the quote, separated by '--': ")
-        text = self._multi_input("Please input quote: ")
-        self._new_quote(summary, keywords, pages, text)
+        super(InProceedings, self).__init__(value, type_of_input, biblio, ["author", "title", "booktitle", "year"],
+                                        ["editor", "pages", "organization", "publisher", "address", "month", "key"])
 
-    def _bibtex_from_user_input(self):
-        self.fields = {"title": input("Title of the book: "),
-                    # Authors need to be in the format $Lastname$, $initials of first names$ and $next_lastname$ etc.
-                      "author": input("Names of the authors, separated by ' and ': "),
-                      "editors": input("Names of the editors, separated by ' and ': "),
-                      "year": input("Year of publication: "),
-                      "publisher": input("Name of publisher: "),
-                      "isbn": input("ISBN of the book: "),
-                       "doi" : "None",
-        }
+class InBook(Publication):
+    def __init__(self, value, type_of_input, biblio):
+        self.type_of_publication = "Inbook"
+        self.is_booklike = True
 
-        first_author = self.fields["author"].split(" and ")[0]
-        shortie = (first_author.split(" ")[len(first_author.split(" "))-1] + "_" + self.fields["year"])
-
-        self.bibtex = "@" + self.type_of_publication + "{" + shortie + ",\n"
-        for i, __ in enumerate(list(self.fields.values())):
-            self.bibtex += "\t" + list(self.fields.keys())[i] + " = {" + list(self.fields.values())[i] + "},\n"
-        self.bibtex += "}"
-
-    def _add_quotes_from_bibtex(self, array_of_quotes):
-        for q in array_of_quotes:
-            self._new_quote(q.split("__")[0], q.split("__")[1], q.split("__")[2], q.split("__")[3])
+        super(InBook, self).__init__(value, type_of_input, biblio, ["author", "title", "pages", "publisher", "year"],
+                                        ["volume", "series", "address", "edition", "editor", "month", "key"])

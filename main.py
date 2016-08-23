@@ -11,6 +11,8 @@ import requests
 import textwrap
 import unicodedata
 
+
+
 class Library(object):
     def __init__(self, papers, keywords, nkeywords, loc):
         self.publications = papers
@@ -117,7 +119,7 @@ class Library(object):
     def list_publications(self):
         'Lists the publications that are saved in the bibliography.'
         for counter, paper in enumerate(self.publications):
-            print(counter+1, ".", paper.authors, paper.year, "--", paper.title)
+            print(counter + 1, ".", paper.authors, paper.year, "--", paper.title)
 
     def list_keywords(self):
         'Lists the keywords that are attached to quotes from the publications in the bibliography.'
@@ -210,6 +212,8 @@ class Library(object):
 
     def add_a_publication(self):
         'Is used to add a paper to the bibliography via doi or manually'
+        #TODO> Make arxiv ID insertable, then put DOI to arxiv/ID
+        #TODO> Also make ISBN insertable
         doi = input("Please input doi. If no doi is available, leave empty. ")
         print(doi)
         if doi:
@@ -220,13 +224,17 @@ class Library(object):
                 new_publication = Publication.Article(None, "READ_BIBTEX_INPUT", self)
             elif type_short is 'b':
                 new_publication = Publication.Book(None, "READ_BIBTEX_INPUT", self)
+            elif type_short is "i":
+                new_publication = Publication.InBook(None, "READ_BIBTEX_INPUT", self)
             else:
                 new_publication = Publication.Publication(None, "READ_BIBTEX_INPUT", self)
+
             if not self._already_contains_publication(new_publication):
                 self.append_publication(new_publication)
             else:
                 print("This paper is already in the Library.")
                 self.latest_paper = new_publication
+
 
 class Citation(object):
     def __init__(self, block_of_text, publication, key, type_of_input):
@@ -247,18 +255,18 @@ class Citation(object):
                 for word in self.keywords.split(", "):
                     key.add_word(word, self)
         elif type_of_input == "USER":
-            if publication.type_of_publication == "article":
-                self.summary = block_of_text[1]
-                self.keywords = block_of_text[2]
-                self.publication = publication
-                self.text = block_of_text[4]
-                for word in self.keywords.split(", "):
-                    key.add_word(word, self)
-            elif publication.type_of_publication == "book":
+            if publication.is_booklike:
                 self.summary = block_of_text[1]
                 self.keywords = block_of_text[2]
                 self.publication = publication
                 self.pages = block_of_text[3]
+                self.text = block_of_text[4]
+                for word in self.keywords.split(", "):
+                    key.add_word(word, self)
+            else:
+                self.summary = block_of_text[1]
+                self.keywords = block_of_text[2]
+                self.publication = publication
                 self.text = block_of_text[4]
                 for word in self.keywords.split(", "):
                     key.add_word(word, self)
@@ -341,6 +349,10 @@ def read_bibtex(location):
                 publication = Publication.Article(record, "READ_BIBTEX", bib)
             elif "@book" in record[0]:
                 publication = Publication.Book(record, "READ_BIBTEX", bib)
+            elif "@INPROCEEDINGS" in record[0]:
+                publication = Publication.InProceedings(record, "READ_BIBTEX", bib)
+            elif "@Inbook" in record[0]:
+                publication = Publication.InBook(record, "READ_BIBTEX", bib)
             else:
                 publication = Publication.Publication(record, "READ_BIBTEX", bib)
             bib.append_publication(publication)
