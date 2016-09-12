@@ -10,8 +10,9 @@ import Publication
 import requests
 import textwrap
 import unicodedata
+import arxiv2bibtex
 
-
+#TODO: When saving a new document with new quotes, there is no comma inserted in the line before the quote line.
 
 class Library(object):
     def __init__(self, papers, keywords, nkeywords, loc):
@@ -43,7 +44,16 @@ class Library(object):
 
     def add_publication_with_doi(self, doi):
         bibtex = self._get_bibtex_from_internet(doi)
+        self.add_publication_from_bibtex(bibtex)
 
+    def add_publication_from_arxiv(self, arxivid):
+        bibtex = arxiv2bibtex.arxiv2bib([arxivid])[0]
+        bibtex = bibtex.bibtex().replace(bibtex.id+",", bibtex.authors[0].split(" ")[-1] + "_" + bibtex.year + ",")
+        self.add_publication_from_bibtex([b for b in bibtex.split(",\n")])
+
+    def add_publication_from_bibtex(self, bibtex):
+        if "@techreport{" in bibtex[0]:
+            bibtex = self._turn_techreport_to_type(bibtex, Publication.Article)
         if "@article{" in bibtex[0]:
             new_paper = Publication.Article(bibtex, "READ_BIBTEX", self)
         elif "@book{" in bibtex[0]:
@@ -212,28 +222,42 @@ class Library(object):
 
     def add_a_publication(self):
         'Is used to add a paper to the bibliography via doi or manually'
-        #TODO> Make arxiv ID insertable, then put DOI to arxiv/ID
         #TODO> Also make ISBN insertable
         doi = input("Please input doi. If no doi is available, leave empty. ")
         print(doi)
         if doi:
             self.add_publication_with_doi(doi)
         else:
-            type_short = input("Type of publication. 'a' for article, 'b' for book, 'i' for inbook: ")
-            if type_short is 'a':
-                new_publication = Publication.Article(None, "READ_BIBTEX_INPUT", self)
-            elif type_short is 'b':
-                new_publication = Publication.Book(None, "READ_BIBTEX_INPUT", self)
-            elif type_short is "i":
-                new_publication = Publication.InBook(None, "READ_BIBTEX_INPUT", self)
+            arxivid = input("Please input arxiv ID. If no doi is available, leave empty. ")
+            if arxivid:
+                self.add_publication_from_arxiv(arxivid)
             else:
-                new_publication = Publication.Publication(None, "READ_BIBTEX_INPUT", self)
+                type_short = input("Type of publication. 'a' for article, 'b' for book, 'i' for inbook: ")
+                if type_short is 'a':
+                    new_publication = Publication.Article(None, "READ_BIBTEX_INPUT", self)
+                elif type_short is 'b':
+                    new_publication = Publication.Book(None, "READ_BIBTEX_INPUT", self)
+                elif type_short is "i":
+                    new_publication = Publication.InBook(None, "READ_BIBTEX_INPUT", self)
+                else:
+                    new_publication = Publication.Publication(None, "READ_BIBTEX_INPUT", self)
 
-            if not self._already_contains_publication(new_publication):
-                self.append_publication(new_publication)
-            else:
-                print("This paper is already in the Library.")
-                self.latest_paper = new_publication
+                if not self._already_contains_publication(new_publication):
+                    self.append_publication(new_publication)
+                else:
+                    print("This paper is already in the Library.")
+                    self.latest_paper = new_publication
+
+    #TODO: Write a function that plots the authors as network. But also count the number of non-connected networks.
+
+    def _turn_techreport_to_type(self, bibtex, new_type):
+        bibtex.insert(1, "\tjournal = {bioRxiv}")
+        fields = [line.strip().split(" = ")[0] for line in bibtex]
+
+        if len([part for part in new_type.required_fields if part in fields]) == 4:
+            bibtex[0] = bibtex[0].replace("techreport", new_type.type_of_publication)
+
+        return bibtex
 
 
 class Citation(object):

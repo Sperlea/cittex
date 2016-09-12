@@ -221,7 +221,10 @@ class Publication(object):
         # additions make it neccesary to add the keywords one-by-one.
         summary = input("Please input summary: ")
         more_keywords = True
-        keywords = []
+        #keywords = []
+
+        keywords = self._read_keywords_from_summary(summary)
+
         while more_keywords:
             new_keyword = input("Please input one keyword or leave empty: ")
 
@@ -233,7 +236,7 @@ class Publication(object):
                 keywords.append(new_keyword)
 
             try:
-                predicted_keyword = self._predict_next_keyword(new_keyword)
+                predicted_keyword = self._predict_next_keyword(new_keyword, keywords)
                 if predicted_keyword:
                     keywords.append(predicted_keyword)
             except KeyError:
@@ -264,7 +267,7 @@ class Publication(object):
                               key = lambda x: sum([i[0] != ' ' for i in difflib.ndiff(keyword, x)]) / 2)
         relevant_word = sorted_words[0]
 
-        if sum([i[0] != ' ' for i in difflib.ndiff(keyword, relevant_word)]) / 2 < 3:
+        if sum([i[0] != ' ' for i in difflib.ndiff(keyword, relevant_word)]) / 2 < 3 and relevant_word != keyword:
             answer = input("You typed \"" + keyword + "\", but do you mean \"" + relevant_word + "\"? (y/n)  ")
             if answer.lower() == "y":
                 return relevant_word
@@ -273,7 +276,7 @@ class Publication(object):
         else:
             return keyword
 
-    def _predict_next_keyword(self, query_keyword):
+    def _predict_next_keyword(self, query_keyword, already_present_keywords):
         size = len(self.Biblio.keywords.words[query_keyword])
         all_keywords = []
         for cit in self.Biblio.keywords.words[query_keyword]:
@@ -282,16 +285,30 @@ class Publication(object):
 
         word_counter = Counter(all_keywords)
 
-        if word_counter[sorted([w for w in word_counter], key = lambda x: word_counter[x])[::-1][0]] > size / 3:
-            use_predicted_word = (
-                input("Do you want to add the keyword \"" + word_counter.most_common(2)[1][0] + "\"" + "? (y/n) " ).lower()
-                == "y")
-            if use_predicted_word:
-                return word_counter.most_common(2)[1][0]
+        try:
+            if word_counter[sorted([w for w in word_counter], key = lambda x: word_counter[x])[::-1][0]] > size / 3:
+                if word_counter.most_common(2)[1][0] not in already_present_keywords:
+                    use_predicted_word = (
+                        input("Do you want to add the keyword \"" + word_counter.most_common(2)[1][0] + "\"" + "? (y/n) " ).lower()
+                        == "y")
+                    if use_predicted_word:
+                        return word_counter.most_common(2)[1][0]
+                    else:
+                        return None
+                else:
+                    return None
             else:
-                return None
-        else:
-            return None #is falsy, so you could just check for the output of this function with an easy if clause
+                return None #is falsy, so you could just check for the output of this function with an easy if clause
+        except IndexError:
+            return None
+
+    def _read_keywords_from_summary(self, summary):
+        kwords_in_summary = [kw for kw in self.Biblio.keywords.words if kw.lower() in summary.lower()]
+        use_these_keywords = [ [kw] + [self._predict_next_keyword(kw, kwords_in_summary)] for kw in kwords_in_summary if "y" == input("Use the keyword '" + kw + "', found in summary (y/n)? ").lower()]
+        use_these_keywords = [item for sublist in use_these_keywords for item in sublist if item]
+
+        return use_these_keywords
+
 
 
 def caseless_equal(left, right):
@@ -299,22 +316,26 @@ def caseless_equal(left, right):
 
 
 class Article(Publication):
-    def __init__(self, value, type_of_input, biblio):
-        self.type_of_publication = "article"
-        self.is_booklike = False
+    required_fields = ["author", "title", "journal", "year"]
+    optional_fields = ["volume", "number", "pages", "month"]
+    is_booklike = False
+    type_of_publication = "article"
 
-        super(Article, self).__init__(value, type_of_input, biblio, ["author", "title", "journal", "year"],
-                                            ["volume", "number", "pages", "month"])
+    def __init__(self, value, type_of_input, biblio):
+        super(Article, self).__init__(value, type_of_input, biblio, self.required_fields, self.optional_fields)
 
 class Book(Publication):
-    def __init__(self, value, type_of_input, biblio):
-        self.type_of_publication = "book"
-        self.is_booklike = True
+    required_fields = ["author", "title", "publisher", "year"]
+    optional_fields = ["volume", "series", "address", "edition", "month", "key"]
+    type_of_publication = "book"
+    is_booklike = True
 
-        super(Book, self).__init__(value, type_of_input, biblio, ["author", "title", "publisher", "year"],
-                                            ["volume", "series", "address", "edition", "month", "key"])
+    def __init__(self, value, type_of_input, biblio):
+        super(Book, self).__init__(value, type_of_input, biblio, self.required_fields, self.optional_fields)
 
 class InProceedings(Publication):
+    ##TODO: Make analogous to article and book
+
     def __init__(self, value, type_of_input, biblio):
         self.type_of_publication = "InProceedings"
         self.is_booklike = False
