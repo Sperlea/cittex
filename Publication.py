@@ -3,9 +3,11 @@ import unicodedata
 import difflib
 from collections import Counter
 
-# TODO: man sollte mal alle vorhandenen quotes nach keyword-duplikate durchsuchen
+
 class Publication(object):
-    # TODO: Make it easily possible to change the information of a given quote/note!
+    # TODO: for each quote, for each note, add a field that contains a machine readable, logical transcription of
+    # the content
+
 
     def __init__(self, value, type_of_input, biblio, required, optional):
         self.Biblio = biblio
@@ -334,19 +336,19 @@ class Book(Publication):
         super(Book, self).__init__(value, type_of_input, biblio, self.required_fields, self.optional_fields)
 
 class InProceedings(Publication):
-    ##TODO: Make analogous to article and book
+    required_fields = ["author", "title", "booktitle", "year"]
+    optional_fields = ["editor", "pages", "organization", "publisher", "address", "month", "key"]
+    is_booklike = False
+    type_of_publication = "InProceedings"
 
     def __init__(self, value, type_of_input, biblio):
-        self.type_of_publication = "InProceedings"
-        self.is_booklike = False
-
-        super(InProceedings, self).__init__(value, type_of_input, biblio, ["author", "title", "booktitle", "year"],
-                                        ["editor", "pages", "organization", "publisher", "address", "month", "key"])
+        super(InProceedings, self).__init__(value, type_of_input, biblio, self.required_fields, self.optional_fields)
 
 class InBook(Publication):
-    def __init__(self, value, type_of_input, biblio):
-        self.type_of_publication = "Inbook"
-        self.is_booklike = True
+    required_fields = ["author", "title", "pages", "publisher", "year"]
+    optional_fields = ["volume", "series", "address", "edition", "editor", "month", "key"]
+    is_booklike = True
+    type_of_publication = "Inbook"
 
-        super(InBook, self).__init__(value, type_of_input, biblio, ["author", "title", "pages", "publisher", "year"],
-                                        ["volume", "series", "address", "edition", "editor", "month", "key"])
+    def __init__(self, value, type_of_input, biblio):
+       super(InBook, self).__init__(value, type_of_input, biblio, self.required_fields, self.optional_fields)

@@ -11,6 +11,9 @@ import requests
 import textwrap
 import unicodedata
 import arxiv2bibtex
+from collections import Counter
+import isbnlib
+from isbnlib.registry import bibformatters
 
 #TODO: When saving a new document with new quotes, there is no comma inserted in the line before the quote line.
 
@@ -54,18 +57,29 @@ class Library(object):
     def add_publication_from_bibtex(self, bibtex):
         if "@techreport{" in bibtex[0]:
             bibtex = self._turn_techreport_to_type(bibtex, Publication.Article)
-        if "@article{" in bibtex[0]:
-            new_paper = Publication.Article(bibtex, "READ_BIBTEX", self)
-        elif "@book{" in bibtex[0]:
-            new_paper = Publication.Book(bibtex, "READ_BIBTEX", self)
-        else:
-            print("I don't know what this is.")
-            new_paper = Publication.Publication(bibtex, "READ_BIBTEX", self)
+
+        typedict = {subclass.type_of_publication: subclass for subclass in Publication.Publication.__subclasses__()}
+        new_paper = typedict[bibtex[0].split("{")[0][1:]](bibtex, "READ_BIBTEX", self)
+
         if not self._already_contains_publication(new_paper):
             self.append_publication(new_paper)
         else:
             print("This paper is alreasy in the Library.")
             self.latest_paper = new_paper
+
+    def add_publication_from_isbn(isbn):
+        isbnlib.config.add_apikey("isbndb", "2TCD2CVI")
+        bibtex = bibformatters['bibtex']
+
+        data = isbnlib.meta(isbn, "isbndb")
+        for part in data:
+            if not data[part]:
+                print(part, data[part])
+                data[part] = input("Missing Value! Please input value for the field " + part + ". ")
+        data["ISBN-13"] = data["Authors"][0].split(", ")[0] + "_" + str(data["Year"])
+
+        new_bibtex = bibtex(data).replace("  ", "").replace("\n ", "\n").split("\n")
+        p.add_publication_from_bibtex(new_bibtex)
 
     def save(self):
         self.export_as_bibtex(self.location)
@@ -258,6 +272,15 @@ class Library(object):
             bibtex[0] = bibtex[0].replace("techreport", new_type.type_of_publication)
 
         return bibtex
+
+    def find_double_keywords(self):
+        for i, paper in enumerate(self.publications):
+            print(i, paper)
+            for j, quote in enumerate(paper.quotes):
+                doubles = [kword for kword in Counter(quote.keywords.split(", "))
+                           if Counter(quote.keywords.split(", "))[kword] > 1]
+                if doubles:
+                    print(doubles)
 
 
 class Citation(object):
