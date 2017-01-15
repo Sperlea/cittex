@@ -14,17 +14,25 @@ import arxiv2bibtex
 from collections import Counter
 import isbnlib
 from isbnlib.registry import bibformatters
+from textblob import TextBlob as tb
+import math
 
-#TODO: When saving a new document with new quotes, there is no comma inserted in the line before the quote line.
 
 class Library(object):
     def __init__(self, papers, keywords, nkeywords, loc):
+        self.textblobcorpus = []
         self.publications = papers
         self.keywords = keywords
         self.note_keywords = nkeywords
         self.location = loc
+        self.typedict = {subclass.type_of_publication: subclass for subclass in Publication.Publication.__subclasses__()}
+
         if papers:
             self.latest_paper = self.publications[len(self.publications) - 1]
+        self.brainmodules = []
+
+    def add_brainmodule(self, brainmodule):
+        self.brainmodules.append(brainmodule)
 
     def append_publication(self, publication):
         self.publications.append(publication)
@@ -55,34 +63,38 @@ class Library(object):
         self.add_publication_from_bibtex([b for b in bibtex.split(",\n")])
 
     def add_publication_from_bibtex(self, bibtex):
-        if "@techreport{" in bibtex[0]:
-            bibtex = self._turn_techreport_to_type(bibtex, Publication.Article)
+        try:
+            if "@techreport{" in bibtex[0]:
+                bibtex = self._turn_techreport_to_type(bibtex, Publication.Article)
 
-        typedict = {subclass.type_of_publication: subclass for subclass in Publication.Publication.__subclasses__()}
-        new_paper = typedict[bibtex[0].split("{")[0][1:]](bibtex, "READ_BIBTEX", self)
+            new_paper = self.typedict[bibtex[0].split("{")[0][1:]](bibtex, "READ_BIBTEX", self)
 
-        if not self._already_contains_publication(new_paper):
-            self.append_publication(new_paper)
-        else:
-            print("This paper is alreasy in the Library.")
-            self.latest_paper = new_paper
+            if not self._already_contains_publication(new_paper):
+                self.append_publication(new_paper)
+                print(new_paper)
+            else:
+                print("This paper is already in the Library.")
+                self.latest_paper = new_paper
+        except TypeError:
+            print("ERROR: This doi couldn't be resolved. Skipping...")
 
-    def add_publication_from_isbn(isbn):
+    def add_publication_from_isbn(self, isbn):
         isbnlib.config.add_apikey("isbndb", "2TCD2CVI")
         bibtex = bibformatters['bibtex']
 
         data = isbnlib.meta(isbn, "isbndb")
         for part in data:
             if not data[part]:
-                print(part, data[part])
                 data[part] = input("Missing Value! Please input value for the field " + part + ". ")
         data["ISBN-13"] = data["Authors"][0].split(", ")[0] + "_" + str(data["Year"])
 
         new_bibtex = bibtex(data).replace("  ", "").replace("\n ", "\n").split("\n")
-        p.add_publication_from_bibtex(new_bibtex)
+        self.add_publication_from_bibtex(new_bibtex)
 
     def save(self):
         self.export_as_bibtex(self.location)
+        for bm in self.brainmodules:
+            bm.save()
 
     def _already_contains_publication(self, new_paper):
         found = False
@@ -93,13 +105,14 @@ class Library(object):
                     break
         return found
 
-    def export_as_bibtex(self, location):
+    def export_as_bibtex(self, location, verbose = True):
         handle = open(location, "w")
 
         for i, paper in enumerate(self.publications):
-            print("Written " + str(i+1) + " of " + str(len(self.publications)) + " publications as BIBTEX")
-            print(paper.title)
             handle.write(paper.as_bibtex_with_quotes())
+            if verbose:
+                print("Written " + str(i+1) + " of " + str(len(self.publications)) + " publications as BIBTEX")
+                print(paper.title)
 
     def search_in_quotes(self, query):
         counter = 0
@@ -137,6 +150,7 @@ class Library(object):
             url = doi
         else:
             url = "http://dx.doi.org/" + doi
+
         r = requests.get(url, headers=self.headers)
         return r.text
 
@@ -236,31 +250,43 @@ class Library(object):
 
     def add_a_publication(self):
         'Is used to add a paper to the bibliography via doi or manually'
-        #TODO> Also make ISBN insertable
+
         doi = input("Please input doi. If no doi is available, leave empty. ")
-        print(doi)
         if doi:
+            print(doi)
             self.add_publication_with_doi(doi)
+            for bm in self.brainmodules:
+                bm.add_paper(self.latest_paper)
         else:
             arxivid = input("Please input arxiv ID. If no doi is available, leave empty. ")
             if arxivid:
                 self.add_publication_from_arxiv(arxivid)
+                for bm in self.brainmodules:
+                    bm.add_paper(self.latest_paper)
             else:
-                type_short = input("Type of publication. 'a' for article, 'b' for book, 'i' for inbook: ")
-                if type_short is 'a':
-                    new_publication = Publication.Article(None, "READ_BIBTEX_INPUT", self)
-                elif type_short is 'b':
-                    new_publication = Publication.Book(None, "READ_BIBTEX_INPUT", self)
-                elif type_short is "i":
-                    new_publication = Publication.InBook(None, "READ_BIBTEX_INPUT", self)
+                isbn = input("Please input ISBN-13. If no doi is available, leave empty. ")
+                if isbn:
+                    self.add_publication_from_isbn(isbn)
+                    for bm in self.brainmodules:
+                        bm.add_paper(self.latest_paper)
                 else:
-                    new_publication = Publication.Publication(None, "READ_BIBTEX_INPUT", self)
+                    type_short = input("Type of publication. 'a' for article, 'b' for book, 'i' for inbook: ")
+                    if type_short is 'a':
+                        new_publication = Publication.Article(None, "READ_BIBTEX_INPUT", self)
+                    elif type_short is 'b':
+                        new_publication = Publication.Book(None, "READ_BIBTEX_INPUT", self)
+                    elif type_short is "i":
+                        new_publication = Publication.InBook(None, "READ_BIBTEX_INPUT", self)
+                    else:
+                        new_publication = Publication.Publication(None, "READ_BIBTEX_INPUT", self)
 
-                if not self._already_contains_publication(new_publication):
-                    self.append_publication(new_publication)
-                else:
-                    print("This paper is already in the Library.")
-                    self.latest_paper = new_publication
+                    if not self._already_contains_publication(new_publication):
+                        self.append_publication(new_publication)
+                        for bm in self.brainmodules:
+                            bm.add_paper(new_publication)
+                    else:
+                        print("This paper is already in the Library.")
+                        self.latest_paper = new_publication
 
     #TODO: Write a function that plots the authors as network. But also count the number of non-connected networks.
 
@@ -282,41 +308,60 @@ class Library(object):
                 if doubles:
                     print(doubles)
 
+    def update_brain_modules(self, paper):
+        for bm in self.brainmodules:
+            bm.add_information_on_paper(paper)
+
+    def plot_years(self):
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+
+        years = [int(pub.year) for pub in self.publications]
+        plt.hist(years, bins=(max(years) - min(years)) + 1)
+        plt.show()
+
+    def extract_possible_keywords_from_quote(self, quote, number = 5):
+        #In principle taken from https://gist.github.com/sloria/6407257
+
+        def tf(word, blob):
+            return blob.words.count(word) / len(blob.words)
+
+        def n_containing(word, bloblist):
+            return sum(1 for blob in bloblist if word in blob)
+
+        def idf(word, bloblist):
+            return math.log(len(bloblist) / (1 + n_containing(word, bloblist)))
+
+        def tfidf(word, blob, bloblist):
+            return tf(word, blob) * idf(word, bloblist)
+
+        queryblob = tb(quote.text.lower())
+        scores = {word: tfidf(word, queryblob, self.textblobcorpus) for word in queryblob.words}
+        sorted_words = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        return [w[0] for w in sorted_words[:number]]
+
 
 class Citation(object):
-    def __init__(self, block_of_text, publication, key, type_of_input):
-        if type_of_input == "BIBTEX":
-            if publication.type_of_publication == "article":
-                self.summary = block_of_text.split("__")[0]
-                self.keywords = block_of_text.split("__")[1]
-                self.publication = publication
-                self.text = block_of_text.split("__")[3]
-                for word in self.keywords.split(", "):
-                    key.add_word(word, self)
-            elif publication.type_of_publication == "book":
-                self.summary = block_of_text.split("__")[0]
-                self.keywords = block_of_text.split("__")[1]
-                self.publication = publication
-                self.pages = block_of_text.split("__")[2]
-                self.text = block_of_text.split("__")[3]
-                for word in self.keywords.split(", "):
-                    key.add_word(word, self)
-        elif type_of_input == "USER":
-            if publication.is_booklike:
-                self.summary = block_of_text[1]
-                self.keywords = block_of_text[2]
-                self.publication = publication
-                self.pages = block_of_text[3]
-                self.text = block_of_text[4]
-                for word in self.keywords.split(", "):
-                    key.add_word(word, self)
-            else:
-                self.summary = block_of_text[1]
-                self.keywords = block_of_text[2]
-                self.publication = publication
-                self.text = block_of_text[4]
-                for word in self.keywords.split(", "):
-                    key.add_word(word, self)
+    def __init__(self, block_of_text, publication, key):
+        if publication.is_booklike:
+            self.publication = publication
+            self.summary = block_of_text[0]
+            self.keywords = block_of_text[1]
+            self.logic = block_of_text[2]
+            self.pages = block_of_text[3]
+            self.text = block_of_text[4]
+            publication.Biblio.textblobcorpus.append(tb(self.text))
+            for word in self.keywords.split(", "):
+                key.add_word(word, self)
+        else:
+            self.publication = publication
+            self.summary = block_of_text[0]
+            self.keywords = block_of_text[1]
+            self.logic = block_of_text[2]
+            self.text = block_of_text[3]
+            publication.Biblio.textblobcorpus.append(tb(self.text))
+            for word in self.keywords.split(", "):
+                key.add_word(word, self)
 
     def __repr__(self):
         output = "Summary: " + self.summary + "\nKeywords: " + self.keywords
@@ -330,7 +375,7 @@ class Citation(object):
         return self.text is other.text
 
     def _to_bibtex_string(self):
-        line = "\tquote = {" + self.summary + "__" + self.keywords + "__"
+        line = "\tquote = {" + self.summary + "__" + self.keywords + "__" + self.logic + "__"
         try:
             line +=  self.pages + "__" + self.text.replace("\n", "") + "},"
         except:
@@ -340,26 +385,22 @@ class Citation(object):
     def _in_list(self):
         return "\t" + self.__repr__().replace("\n", "\n\t")
 
+    def _add_logic(self, line):
+        self.logic = line
+
 
 class Note(Citation):
-    def __init__(self, block_of_text, publication, key, type_of_input):
-        if type_of_input == "BIBTEX":
-            self.summary = block_of_text.split("__")[0]
-            self.keywords = block_of_text.split("__")[1]
-            self.publication = publication
-            self.text = block_of_text.split("__")[2]
-            for word in self.keywords.split(", "):
-                key.add_word(word, self)
-        elif type_of_input == "USER":
-            self.summary = block_of_text[1]
-            self.keywords = block_of_text[2]
-            self.publication = publication
-            self.text = block_of_text[3]
-            for word in self.keywords.split(", "):
-                key.add_word(word, self)
+    def __init__(self, block_of_text, publication, key):
+        #TODO: Wirklich super.init implementieren.
+        self.summary = block_of_text[1]
+        self.keywords = block_of_text[2]
+        self.publication = publication
+        self.text = block_of_text[3]
+        for word in self.keywords.split(", "):
+            key.add_word(word, self)
 
     def _to_bibtex_string(self):
-        return "\tnote = {" + self.summary + "__" + self.keywords + "__" + self.text.replace("\n", "") + "},"
+        return "\tnotes = {" + self.summary + "__" + self.keywords + "__" + self.text.replace("\n", "") + "},"
 
 
 class Keywords(object):
@@ -376,9 +417,23 @@ class Keywords(object):
         self.words = words
 
 
-class Note_Keywords(Keywords):
+class NoteKeywords(Keywords):
     def __init__(self):
         self.words = {}
+
+
+class BrainModule():
+    ## A sort of API for brain modules, which will be able to be added to a literature organizer and standard functions
+    # will automatically call functions that are implemented in the modules
+
+    def save(self):
+        raise NotImplementedError
+
+    def add_information_on_paper(self, paper):
+        raise NotImplementedError
+
+    def add_paper(self, paper):
+        raise NotImplementedError
 
 
 def read_bibtex(location):
@@ -386,30 +441,24 @@ def read_bibtex(location):
     record = []
     bib = open_empty_library(location)
     for i, line in enumerate(file):
-        if "quote = {" in line or "note = {" in line:
+        if "quote = {" in line or "notes = {" in line:
             record.append(line.replace(",\n", "").replace("\n", ""))
         else:
-
             record.append(line.replace(",\n", "").replace("\n", "").replace(", ", ""))
-        if line == "}\n" or line == "}": #line == "}" or
-            if "@article" in record[0]:
-                publication = Publication.Article(record, "READ_BIBTEX", bib)
-            elif "@book" in record[0]:
-                publication = Publication.Book(record, "READ_BIBTEX", bib)
-            elif "@INPROCEEDINGS" in record[0]:
-                publication = Publication.InProceedings(record, "READ_BIBTEX", bib)
-            elif "@Inbook" in record[0]:
-                publication = Publication.InBook(record, "READ_BIBTEX", bib)
-            else:
-                publication = Publication.Publication(record, "READ_BIBTEX", bib)
+        if line == "}\n" or line == "}":
+            publication = bib.typedict[record[0].split("{")[0][1:]](record, "READ_BIBTEX", bib)
             bib.append_publication(publication)
             record = []
     return bib
 
 
-def open_empty_library(location = None, key = Keywords(), nkey = Note_Keywords()):
+def open_empty_library(location = None, key = Keywords(), nkey = NoteKeywords()):
     return Library([], key, nkey, location)
 
 
 def caseless_equal(left, right):
     return unicodedata.normalize("NFKD", left.casefold()) == unicodedata.normalize("NFKD", right.casefold())
+
+
+#TODO: Add the possibility to extract keywords from the full text using a bag of words approach or something like that
+#TODO: Add exceptions to the bookshelf of shame, so that a bad doi doesn#t crash everything

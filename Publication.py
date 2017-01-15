@@ -5,9 +5,6 @@ from collections import Counter
 
 
 class Publication(object):
-    # TODO: for each quote, for each note, add a field that contains a machine readable, logical transcription of
-    # the content
-
 
     def __init__(self, value, type_of_input, biblio, required, optional):
         self.Biblio = biblio
@@ -42,6 +39,9 @@ class Publication(object):
     def __eq__(self, other):
         # Equality is assessed by comparing the shorties - the short identifier.
         return self.short_identifier == other.short_identifier
+
+    def __hash__(self):
+        return hash(str(self))
 
     def list_keywords(self):
         print("Keywords in the paper: \n\t" + str(self))
@@ -144,12 +144,8 @@ class Publication(object):
         return nv
 
     def _add_quotes_from_bibtex(self, array_of_quotes):
-        if self.is_booklike:
-            for q in array_of_quotes:
-                self._new_quote(q.split("__")[0], q.split("__")[1], q.split("__")[2], q.split("__")[3])
-        else:
-            for q in array_of_quotes:
-                self._new_quote(q.split("__")[0], q.split("__")[1], "", q.split("__")[2])
+        for q in array_of_quotes:
+            self.quotes.append(main.Citation(q.split("__"), self, self.Biblio.keywords))
 
     def _add_notes_from_bibtex(self, array_of_notes):
         for q in array_of_notes:
@@ -158,7 +154,7 @@ class Publication(object):
     def as_bibtex_with_quotes(self):
         if self.bibtex:
             bibtex = self.bibtex
-            bibtex = bibtex[:(len(bibtex)-2)]
+            bibtex = bibtex[:(len(bibtex)-2)] + ","
             for q in self.quotes:
                 bibtex += "\n" + q._to_bibtex_string()
             for n in self.notes:
@@ -170,7 +166,6 @@ class Publication(object):
                             "\tnumber = {" + self.number + "},\n\tpages = {" + self.pages + "},\n"\
                             "\tauthor = {" + self.authors + "},\n\ttitle = {" + self.title + "},\n"\
                             "\tjournal = {" + self.journal + "},"
-
             for q in self.quotes:
                 bibtex += "\n" + q._to_bibtex_string()
             for n in self.notes:
@@ -179,11 +174,14 @@ class Publication(object):
         return bibtex
 
     def _new_quote(self, summary, keywords, pages, text):
-        new_quote = main.Citation([" ", summary, keywords, pages, text], self, self.Biblio.keywords, "USER")
+        if self.is_booklike:
+            new_quote = main.Citation([summary, keywords, ".", pages, text], self, self.Biblio.keywords)
+        else:
+            new_quote = main.Citation([summary, keywords, ".", text], self, self.Biblio.keywords)
         self.quotes.append(new_quote)
 
     def _new_note(self, summary, keywords, text):
-        new_note = main.Note([" ", summary, keywords, text], self, self.Biblio.note_keywords, "USER")
+        new_note = main.Note([summary, keywords, ".", text], self, self.Biblio.note_keywords)
         self.notes.append(new_note)
 
     def _multi_input(self, prompt):
@@ -250,7 +248,7 @@ class Publication(object):
             pages = input("Pages of the quote, separated by '--': ")
             self._new_quote(summary, ", ".join(keywords), pages, text)
         else:
-            self._new_quote(summary, ", ".join(keywords), "", text)
+            self._new_quote(summary, ", ".join(keywords), None, text)
 
     def _keyword_wrong_case(self, keyword):
         words = [word for word in self.Biblio.keywords.words if keyword != word and caseless_equal(keyword, word)]
