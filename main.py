@@ -15,6 +15,7 @@ from collections import Counter
 import isbnlib
 from isbnlib.registry import bibformatters
 from textblob import TextBlob as tb
+from tqdm import tqdm
 import math
 
 
@@ -68,10 +69,19 @@ class Library(object):
                 bibtex = self._turn_techreport_to_type(bibtex, Publication.Article)
 
             new_paper = self.typedict[bibtex[0].split("{")[0][1:]](bibtex, "READ_BIBTEX", self)
-
             if not self._already_contains_publication(new_paper):
-                self.append_publication(new_paper)
-                print(new_paper)
+                oldshorties = [b.short_identifier for b in self.publications if new_paper.short_identifier in b.short_identifier]
+                if oldshorties:
+                    try:
+                        oldletter = new_paper.short_identifier.split("_")[1][4]
+                        newshort_identifier = new_paper.short_identifier[:-1] + chr(ord(oldletter)+1)
+                    except IndexError:
+                        newshort_identifier = new_paper.short_identifier +"a"
+                    new_paper.bibtex = new_paper.bibtex.replace(new_paper.short_identifier, newshort_identifier)
+
+                    self.add_publication_from_bibtex(new_paper.bibtex.split(",\n"))
+                else:
+                    self.append_publication(new_paper)
             else:
                 print("This paper is already in the Library.")
                 self.latest_paper = new_paper
@@ -107,12 +117,10 @@ class Library(object):
 
     def export_as_bibtex(self, location, verbose = True):
         handle = open(location, "w")
-
-        for i, paper in enumerate(self.publications):
+        for paper in tqdm(self.publications, desc = "Saving as BIBTEX... ", unit = " paper", disable = not verbose,
+            bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} paper"):
             handle.write(paper.as_bibtex_with_quotes())
-            if verbose:
-                print("Written " + str(i+1) + " of " + str(len(self.publications)) + " publications as BIBTEX")
-                print(paper.title)
+        print()
 
     def search_in_quotes(self, query):
         counter = 0
@@ -150,7 +158,6 @@ class Library(object):
             url = doi
         else:
             url = "http://dx.doi.org/" + doi
-
         r = requests.get(url, headers=self.headers)
         return r.text
 
@@ -320,25 +327,38 @@ class Library(object):
         plt.hist(years, bins=(max(years) - min(years)) + 1)
         plt.show()
 
-    def extract_possible_keywords_from_quote(self, quote, number = 5):
-        #In principle taken from https://gist.github.com/sloria/6407257
+    def loop_through_fulltext_quotes(self, chosen_keyword):
+        print("Chosen keyword: " + chosen_keyword)
+        for counter, cit in enumerate(self.keywords.words[chosen_keyword]):
+            print(str(counter) + " of " + str(len(self.keywords.words[chosen_keyword])))
+            print("Summary: " + self.keywords.words[chosen_keyword][counter].summary)
+            print("Keywords: " + self.keywords.words[chosen_keyword][counter].keywords)
+            print("Paper: " + str(self.keywords.words[chosen_keyword][counter].publication))
+            print("Short: " + self.keywords.words[chosen_keyword][counter].publication.short_identifier)
+            print(textwrap.fill(self.keywords.words[chosen_keyword][counter].text, 100))
+            input("(enter)")
+            print("")
 
-        def tf(word, blob):
-            return blob.words.count(word) / len(blob.words)
+    def get_quoteless_papers(self):
+        return [paper for paper in self.publications if len(paper.quotes) == 0]
 
-        def n_containing(word, bloblist):
-            return sum(1 for blob in bloblist if word in blob)
+    def remove_paper(self, paper):
+        papernumber = [i for i, pap in enumerate(self.publications) if pap == paper][0]
 
-        def idf(word, bloblist):
-            return math.log(len(bloblist) / (1 + n_containing(word, bloblist)))
+        del self.publications[papernumber]
 
-        def tfidf(word, blob, bloblist):
-            return tf(word, blob) * idf(word, bloblist)
+    def move_quoteless_papers_to_bookshelf_of_shame(self):
+        bos = [brain for brain in self.brainmodules if getattr(brain, "add_without_mother", None)][0]
 
-        queryblob = tb(quote.text.lower())
-        scores = {word: tfidf(word, queryblob, self.textblobcorpus) for word in queryblob.words}
-        sorted_words = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        return [w[0] for w in sorted_words[:number]]
+        for i, pub in enumerate(self.get_quoteless_papers()[::-1]):
+            answer = input("Do you want to keep '" + pub.title + "'? (y/n) ")
+            if answer == "y":
+                bos.add_without_mother(pub)
+            else:
+                None
+            self.remove_paper(pub)
+        self.save()
+
 
 
 class Citation(object):
@@ -373,6 +393,9 @@ class Citation(object):
 
     def __eq__(self, other):
         return self.text is other.text
+
+    def __hash__(self):
+        return hash(str(self.text))
 
     def _to_bibtex_string(self):
         line = "\tquote = {" + self.summary + "__" + self.keywords + "__" + self.logic + "__"
@@ -416,6 +439,14 @@ class Keywords(object):
     def overwrite(self, words):
         self.words = words
 
+    def replace_keyword(self, old_kw, new_kw):
+        for citation in self.words[old_kw]:
+            citation.keywords = citation.keywords.replace(old_kw, new_kw)
+            citation.keywords = ", ".join(list(set(citation.keywords.split(", "))))
+
+        self.words[new_kw].extend(self.words.pop(old_kw))
+        self.words[new_kw] = list(set(self.words[new_kw]))
+
 
 class NoteKeywords(Keywords):
     def __init__(self):
@@ -439,7 +470,7 @@ class BrainModule():
 def read_bibtex(location):
     file = open(location, "r")
     record = []
-    bib = open_empty_library(location)
+    bib = open_empty_library(location, key=Keywords())
     for i, line in enumerate(file):
         if "quote = {" in line or "notes = {" in line:
             record.append(line.replace(",\n", "").replace("\n", ""))
@@ -458,7 +489,3 @@ def open_empty_library(location = None, key = Keywords(), nkey = NoteKeywords())
 
 def caseless_equal(left, right):
     return unicodedata.normalize("NFKD", left.casefold()) == unicodedata.normalize("NFKD", right.casefold())
-
-
-#TODO: Add the possibility to extract keywords from the full text using a bag of words approach or something like that
-#TODO: Add exceptions to the bookshelf of shame, so that a bad doi doesn#t crash everything

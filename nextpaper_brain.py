@@ -1,6 +1,7 @@
 import main
+from tqdm import tqdm
 
-
+#TODO: Zwei Probleme: 1. bei gleichem shortie wird kein a... b... eingefügt. 2. Wenn ein paper zweimal in dem graph steht, dann wird es nur einmal entfernt
 class BookshelfOfShame(main.BrainModule):
     def __init__(self, location, motherbib):
         self.location = location
@@ -48,8 +49,12 @@ class BookshelfOfShame(main.BrainModule):
         graph = {}
         for line in list_of_lines:
             if ":" in line:
-                motherpaper = [paper for paper in self.motherbib.publications
+                if line.split(":")[0] == "":
+                    motherpaper = ""
+                else:
+                    motherpaper = [paper for paper in self.motherbib.publications
                                if paper.short_identifier == line.split(":")[0]][0]
+
                 daughters = []
                 for unreadpaper in line.split(": ")[1].strip().split(", "):
                     daughters.append([paper for paper in self.shame_bib.publications if paper.short_identifier == unreadpaper][0])
@@ -81,16 +86,26 @@ class BookshelfOfShame(main.BrainModule):
 
 
     def save_to_location(self, location):
-        self.shame_bib.export_as_bibtex(location, verbose=False)
+        #TODO: Remove commented lines
+        #self.shame_bib.export_as_bibtex(location, verbose=False)
+        print("Saving the bookshelf of shame... ")
+        self.shame_bib.export_as_bibtex(location)
         handle = open(location, "a")
         handle.write("##")
-        for part in self.citation_graph:
+        #for part in self.citation_graph:
+        for part in tqdm(self.citation_graph, desc="Saving the citation graph... ", unit=" ",
+                          bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} lines"):
             if part is None:
                 handle.write("\n" +
                              ", ".join([paper.short_identifier for paper in self.citation_graph[part]]))
-            else:
-                handle.write("\n" + part.short_identifier + ": " +
+            elif self.citation_graph[part]:
+                if isinstance(part, str):
+                    handle.write("\n" + part + ": " +
+                                 ", ".join([paper.short_identifier for paper in self.citation_graph[part]]))
+                else:
+                    handle.write("\n" + part.short_identifier + ": " +
                              ", ".join([paper.short_identifier for paper in self.citation_graph[part]]))
+        print()
 
 
     def find_and_remove_paper(self, paper_to_remove):
@@ -121,6 +136,7 @@ class BookshelfOfShame(main.BrainModule):
         while goOn:
             self.shame_bib.add_a_publication()
             if self.shame_bib.latest_paper in self.motherbib.publications:
+                print("Already in the motherbib.")
                 del self.shame_bib.publications[-1]
                 self.shame_bib.latest_paper = self.shame_bib.publications[-2]
             else:
@@ -134,4 +150,18 @@ class BookshelfOfShame(main.BrainModule):
 
     def add_paper(self, paper):
         self.find_and_remove_paper(paper)
-        self.save()
+        #TODO: Do I really need this "save"?
+        #self.save()
+
+
+    def add_without_mother(self, paper):
+        self.shame_bib.add_publication_from_bibtex(paper.bibtex.split(",\n"))
+
+        try:
+            self.citation_graph[""].append(self.shame_bib.latest_paper)
+        except KeyError:
+            self.citation_graph[""] = [self.shame_bib.latest_paper]
+
+
+
+#TODO: Sometimes, this just doesn't write a paper to the bos...
