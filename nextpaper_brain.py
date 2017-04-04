@@ -3,13 +3,26 @@ from tqdm import tqdm
 
 #TODO: Zwei Probleme: 1. bei gleichem shortie wird kein a... b... eingefügt. 2. Wenn ein paper zweimal in dem graph steht, dann wird es nur einmal entfernt
 class BookshelfOfShame(main.BrainModule):
-    def __init__(self, location, motherbib):
-        self.location = location
-        self.motherbib = motherbib
-        literature_data, citation_data = self.read_input_file(location)
-        self.shame_bib = self.handle_bibtex_part(literature_data)
-        self.citation_graph = self.handle_graph_part(citation_data)
-        self.counted_mention_dict = self._count_mentions_in_citation_graph()
+    def __init__(self, location, data, source = "file"):
+        if source == "file":
+            self.location = location
+            self.motherbib = data
+            literature_data, citation_data = self.read_input_file(location)
+            self.shame_bib = self.handle_bibtex_part(literature_data)
+            self.citation_graph = self.handle_graph_part(citation_data)
+            self.counted_mention_dict = self._count_mentions_in_citation_graph()
+        elif source == "data":
+            self.location = location
+            self.motherbib = data[0]
+            self.shame_bib = data[1]
+            self.citation_graph = data[2]
+            self.counted_mention_dict = self._count_mentions_in_citation_graph()
+
+
+    def __add__(self, other):
+        new_shame_bib = self.shame_bib + other.shame_bib
+        new_citgraph = {**self.citation_graph, **other.citation_graph}
+        return BookshelfOfShame(self.location, [self.motherbib, new_shame_bib, new_citgraph], source = "data")
 
 
     def read_input_file(self, location):

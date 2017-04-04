@@ -32,6 +32,19 @@ class Library(object):
             self.latest_paper = self.publications[len(self.publications) - 1]
         self.brainmodules = []
 
+    def __add__(self, other):
+        #TODO: maybe implement this in a nicer way, ie. create a new Library object and check whether the brainmodules of both Library objects are the same
+        newpubs = list(set(self.publications + other.publications))
+        newkeywords = self.keywords + other.keywords
+        newnotekeywords = self.note_keywords + other.note_keywords
+        newlib = Library(newpubs, newkeywords, newnotekeywords, self.location)
+
+        for bm in self.brainmodules:
+            newlib.add_brainmodule(bm)
+
+        return newlib
+
+
     def add_brainmodule(self, brainmodule):
         self.brainmodules.append(brainmodule)
 
@@ -427,8 +440,11 @@ class Note(Citation):
 
 
 class Keywords(object):
-    def __init__(self):
-        self.words = {}
+    def __init__(self, words = {}):
+        self.words = words
+
+    def __add__(self, other):
+        return Keywords({**self.words, **other.words})
 
     def add_word(self, word, quote):
         if word in self.words:
@@ -449,8 +465,11 @@ class Keywords(object):
 
 
 class NoteKeywords(Keywords):
-    def __init__(self):
-        self.words = {}
+    def __init__(self, words = {}):
+        super(NoteKeywords, self).__init__(words)
+
+    def __add__(self, other):
+        return NoteKeywords({**self.words, **other.words})
 
 
 class BrainModule():
