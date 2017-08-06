@@ -2,7 +2,8 @@ import main
 import unicodedata
 import difflib
 from collections import Counter
-
+from textblob import TextBlob as tb
+import math
 
 class Publication(object):
 
@@ -66,7 +67,7 @@ class Publication(object):
             print(i, key)
 
     def add_a_quote(self):
-        if self.is_booklike:
+        if not self.is_booklike:
             summary = input("Please input summary: ")
             keywords = input("Please input keywords, separated by ', ': ")
             text = self._multi_input("Please input quote: ")
@@ -115,9 +116,11 @@ class Publication(object):
         self.short_identifier = value[0].split("{")[1].split(",")[0]
         self.fields = {}
         for line in value:
+
             if " = " in line:
                 key = line.split(" = ")[0].replace("\t", "")
                 val = line.split(" = ")[1].replace("{", "").replace("}", "")
+
                 if val[len(val)-1] == ",":
                     val = val[:len(val)-1]
                 if key in self.fields:
@@ -131,6 +134,7 @@ class Publication(object):
             else:
                 setattr(self, field, self.fields[field][0])
 
+        value[-1] = value[-1].replace("}\n}", "},\n}")
         self.bibtex = self._bibtex_from_record_without_quotes(",\n".join(value))
         if "quote" in self.fields:
             self._add_quotes_from_bibtex(self.fields["quote"])
@@ -154,7 +158,7 @@ class Publication(object):
     def as_bibtex_with_quotes(self):
         if self.bibtex:
             bibtex = self.bibtex
-            bibtex = bibtex[:(len(bibtex)-2)] + ","
+            bibtex = bibtex[:(len(bibtex)-2)]
             for q in self.quotes:
                 bibtex += "\n" + q._to_bibtex_string()
             for n in self.notes:
@@ -220,27 +224,10 @@ class Publication(object):
         # This is a more elaborate function to add quotes to the Publication - with an easy spelling corrector. These
         # additions make it neccesary to add the keywords one-by-one.
         summary = input("Please input summary: ")
-        more_keywords = True
         #keywords = []
 
-        keywords = self._read_keywords_from_summary(summary)
-
-        while more_keywords:
-            new_keyword = input("Please input one keyword or leave empty: ")
-
-            if new_keyword == "":
-                more_keywords = False
-            else:
-                new_keyword = self._keyword_wrong_case(new_keyword)
-                new_keyword = self._keyword_similar(new_keyword)
-                keywords.append(new_keyword)
-
-            try:
-                predicted_keyword = self._predict_next_keyword(new_keyword, keywords)
-                if predicted_keyword:
-                    keywords.append(predicted_keyword)
-            except KeyError:
-                None
+        keywords = self._keywords_from_summary(summary)
+        keywords = self._keywords_from_input(keywords)
 
         keywords = list(set(keywords))
         text = self._multi_input("Please input quote: ")
@@ -249,6 +236,26 @@ class Publication(object):
             self._new_quote(summary, ", ".join(keywords), pages, text)
         else:
             self._new_quote(summary, ", ".join(keywords), None, text)
+
+    def add_a_quote_extraction(self):
+        #This is the newest function, that does extract keywords from the main text.
+        summary = input("Please input summary: ")
+        text = self._multi_input("Please input quote: ")
+
+        keywords = self._keywords_from_summary(summary)
+        keywords = self._keywords_from_text(keywords, text)
+        keywords = self._keywords_from_input(keywords)
+
+        keywords = list(set(keywords))
+
+        if self.is_booklike:
+            pages = input("Pages of the quote, separated by '--': ")
+            self._new_quote(summary, ", ".join(keywords), pages, text)
+        else:
+            self._new_quote(summary, ", ".join(keywords), None, text)
+
+
+        None
 
     def _keyword_wrong_case(self, keyword):
         words = [word for word in self.Biblio.keywords.words if keyword != word and caseless_equal(keyword, word)]
@@ -302,13 +309,78 @@ class Publication(object):
         except IndexError:
             return None
 
-    def _read_keywords_from_summary(self, summary):
+    def _keywords_from_summary(self, summary):
         kwords_in_summary = [kw for kw in self.Biblio.keywords.words if kw.lower() in summary.lower()]
         use_these_keywords = [ [kw] + [self._predict_next_keyword(kw, kwords_in_summary)] for kw in kwords_in_summary if "y" == input("Use the keyword '" + kw + "', found in summary (y/n)? ").lower()]
         use_these_keywords = [item for sublist in use_these_keywords for item in sublist if item]
 
         return use_these_keywords
 
+    def extract_possible_keywords_from_quotetext(self, text, number = 5):
+        #In principle taken from https://gist.github.com/sloria/6407257
+
+        def tf(word, blob):
+            return blob.words.count(word) / len(blob.words)
+
+        def n_containing(word, bloblist):
+            return sum(1 for blob in bloblist if word in blob)
+
+        def idf(word, bloblist):
+            return math.log(len(bloblist) / (1 + n_containing(word, bloblist)))
+
+        def tfidf(word, blob, bloblist):
+            return tf(word, blob) * idf(word, bloblist)
+
+        queryblob = tb(text.lower())
+        scores = {word: tfidf(word, queryblob, self.Biblio.textblobcorpus) for word in queryblob.words}
+        sorted_words = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        return [w[0] for w in sorted_words[:number]]
+
+    def _keywords_from_input(self, keywords):
+        more_keywords = True
+        while more_keywords:
+            new_keyword = input("Please input one keyword or leave empty: ")
+
+            if new_keyword == "":
+                more_keywords = False
+            else:
+                new_keyword = self._keyword_wrong_case(new_keyword)
+                new_keyword = self._keyword_similar(new_keyword)
+                keywords.append(new_keyword)
+
+            try:
+                predicted_keyword = self._predict_next_keyword(new_keyword, keywords)
+                if predicted_keyword:
+                    keywords.append(predicted_keyword)
+            except KeyError:
+                None
+        return keywords
+
+    def _keywords_from_text(self, keywords, text):
+
+        textkeywords = self.extract_possible_keywords_from_quotetext(text)
+        #TODO: don't ask for words that were alredy added in a former step
+        for i, tk in enumerate(textkeywords):
+            rightcase_tk = [word for word in self.Biblio.keywords.words if tk != word and caseless_equal(tk, word)]
+            if rightcase_tk:
+                tk = rightcase_tk[0]
+
+            if tk in self.Biblio.keywords.words:
+                answer = (
+            input("Do you want to add the known keyword '" + tk + "', as extracted from the text? (y/n) ").lower() == "y")
+            else:
+                answer = (
+            input("Do you want to add the keyword '" + tk + "', as extracted from the text? (y/n) ").lower() == "y")
+
+            if answer:
+                keywords.append(tk)
+                try:
+                    predicted_keyword = self._predict_next_keyword(tk, keywords)
+                    if predicted_keyword and predicted_keyword not in keywords: #TODO: Does this work?
+                        keywords.append(predicted_keyword)
+                except KeyError:
+                    None
+        return keywords
 
 
 def caseless_equal(left, right):
@@ -350,3 +422,27 @@ class InBook(Publication):
 
     def __init__(self, value, type_of_input, biblio):
        super(InBook, self).__init__(value, type_of_input, biblio, self.required_fields, self.optional_fields)
+
+
+class incollection(Publication):
+    required_fields = ["author", "title", "booktitle", "year"]
+    optional_fields = ["editor", "pages", "organization", "publisher", "address", "month", "key"]
+    is_booklike = False
+    type_of_publication = "incollection"
+
+    def __init__(self, value, type_of_input, biblio):
+        super(incollection, self).__init__(value, type_of_input, biblio, self.required_fields, self.optional_fields)
+
+
+
+class misc(Publication):
+    required_fields = ["title", "year", "author"]
+    optional_fields = ["howpublished", "month"]
+    is_booklike = False
+    type_of_publication = "misc"
+
+    def __init__(self, value, type_of_input, biblio):
+        value = [v.replace("  ", "\t") for v in value]
+
+
+        super(misc, self).__init__(value, type_of_input, biblio, self.required_fields, self.optional_fields)
