@@ -2,7 +2,7 @@
 # 11.04.16
 # This is a tool for literature - or rather citation organization. It is based on the widely used bibtex format, which
 # makes it easy to use it with applications such as Latex. Quotes are in the center of this program. The user can append
-# notes and quotes to every publication and these quotes and notes are indexed by keywords, contain a short summary and
+# quotes to every publication and these quotes are indexed by keywords, contain a short summary and
 # the text of the quote, all as provided by the user.
 
 
@@ -20,11 +20,10 @@ import math
 
 
 class Library(object):
-    def __init__(self, papers, keywords, nkeywords, loc):
+    def __init__(self, papers, keywords, loc):
         self.textblobcorpus = []
         self.publications = papers
         self.keywords = keywords
-        #self.note_keywords = nkeywords
         self.location = loc
         self.typedict = {subclass.type_of_publication: subclass for subclass in Publication.Publication.__subclasses__()}
 
@@ -35,8 +34,7 @@ class Library(object):
     def __add__(self, other):
         newpubs = list(set(self.publications + other.publications))
         newkeywords = self.keywords + other.keywords
-        newnotekeywords = self.note_keywords + other.note_keywords
-        newlib = Library(newpubs, newkeywords, newnotekeywords, self.location)
+        newlib = Library(newpubs, newkeywords, self.location)
 
         for bm in self.brainmodules:
             newlib.add_brainmodule(bm)
@@ -143,16 +141,6 @@ class Library(object):
                     print()
                     counter += 1
 
-    def search_in_notes(self, query):
-        counter = 0
-        for paper in self.publications:
-            for note in paper.notes:
-                if query in note.text:
-                    print("Query: " + query + " - hit " + str(counter))
-                    print(note)
-                    print()
-                    counter += 1
-
     def _get_bibtex_from_internet(self, doi):
         bibtex_text = self._doi2bibtex(doi)
         if "title = {" in bibtex_text:
@@ -183,15 +171,6 @@ class Library(object):
         for keyword in self.keywords.words:
             output.append(keyword + "\t -- Number: " + str(len(self.keywords.words[keyword])))
 
-        output = sorted(output, key=lambda v: v.upper())
-        for counter, line in enumerate(output):
-            print(counter, line)
-
-    def list_note_keywords(self):
-        'Lists the keywords that are attached to notes from the publications in the bibliography.'
-        output = []
-        for keyword in self.note_keywords.words:
-            output.append(keyword + "\t -- Number: " + str(len(self.note_keywords.words[keyword])))
         output = sorted(output, key=lambda v: v.upper())
         for counter, line in enumerate(output):
             print(counter, line)
@@ -232,12 +211,6 @@ class Library(object):
         for counter, cit in enumerate(self.keywords.words[chosen_keyword]):
             print(counter, cit.summary, "\t||\t" + cit.publication.short_identifier + "\t||\t" + cit.publication.title)
 
-    def quotes_with_note_keyword(self, chosen_keyword):
-        'Lists all notes that have the chosen keyword attached to them.'
-        print("Chosen note keyword: " + chosen_keyword)
-        for counter, cit in enumerate(self.note_keywords.words[chosen_keyword]):
-            print(counter, cit.summary, "\t||\t" + cit.publication.short_identifier + "\t||\t" + cit.publication.title)
-
     def read_full_quote(self, chosen_keyword, index):
         'Shows the full quote specified by the chosen keyword and the index. Chosen keyword and index must be separated by " ".'
         print("Chosen keyword: " + chosen_keyword)
@@ -246,15 +219,6 @@ class Library(object):
         print("Paper: " + str(self.keywords.words[chosen_keyword][index].publication))
         print("Short: " + self.keywords.words[chosen_keyword][index].publication.short_identifier)
         print(textwrap.fill(self.keywords.words[chosen_keyword][index].text, 100))
-
-    def read_full_note(self, chosen_keyword, index):
-        'Shows the full note specified by the chosen keyword and the index. Chosen keyword and index must be separated by " ".'
-        print("Chosen keyword: " + chosen_keyword)
-        print("Summary: " + self.note_keywords.words[chosen_keyword][index].summary)
-        print("Keywords: " + self.note_keywords.words[chosen_keyword][index].keywords)
-        print("Paper: " + str(self.note_keywords.words[chosen_keyword][index].publication))
-        print("Short: " + self.note_keywords.words[chosen_keyword][index].publication.short_identifier)
-        print(self.note_keywords.words[chosen_keyword][index].text)
 
     def show_publications_with_keyword(self, chosen_keyword):
         print("Chosen keyword: " + chosen_keyword)
@@ -423,25 +387,6 @@ class Citation(object):
         self.logic = line
 
 
-class Note(Citation):
-    def __init__(self, block_of_text, publication, key):
-        #TODO: Wirklich super.init implementieren.
-        self.summary = block_of_text[1]
-        self.keywords = block_of_text[2]
-        self.publication = publication
-        self.text = block_of_text[3]
-        for word in self.keywords.split(", "):
-            key.add_word(word, self)
-        print("holo")
-        #__init__(self, block_of_text, publication, key)
-        #super(Citation, self).__init__(value, type_of_input, biblio, self.required_fields, self.optional_fields)
-
-
-
-    def _to_bibtex_string(self):
-        return "\tnotes = {" + self.summary + "__" + self.keywords + "__" + self.text.replace("\n", "") + "},"
-
-
 class Keywords(object):
     def __init__(self, words = {}):
         self.words = words
@@ -467,14 +412,6 @@ class Keywords(object):
         self.words[new_kw] = list(set(self.words[new_kw]))
 
 
-class NoteKeywords(Keywords):
-    def __init__(self, words = {}):
-        super(NoteKeywords, self).__init__(words)
-
-    def __add__(self, other):
-        return NoteKeywords({**self.words, **other.words})
-
-
 class BrainModule():
     ## A sort of API for brain modules, which will be able to be added to a literature organizer and standard functions
     # will automatically call functions that are implemented in the modules
@@ -494,7 +431,7 @@ def read_bibtex(location):
     record = []
     bib = open_empty_library(location, key=Keywords())
     for i, line in enumerate(file):
-        if "quote = {" in line or "notes = {" in line:
+        if "quote = {" in line:
             record.append(line.replace(",\n", "").replace("\n", ""))
         else:
             record.append(line.replace(",\n", "").replace("\n", "").replace(", ", ""))
@@ -505,8 +442,8 @@ def read_bibtex(location):
     return bib
 
 
-def open_empty_library(location = None, key = Keywords(), nkey = NoteKeywords()):
-    return Library([], key, nkey, location)
+def open_empty_library(location = None, key = Keywords()):
+    return Library([], key, location)
 
 
 def caseless_equal(left, right):

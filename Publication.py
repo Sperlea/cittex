@@ -10,7 +10,6 @@ class Publication(object):
     def __init__(self, value, type_of_input, biblio, required, optional):
         self.Biblio = biblio
         self.quotes = []
-        self.notes = []
 
         self.required_fields = required
         self.optional_fields = optional
@@ -55,17 +54,6 @@ class Publication(object):
         for i, key in enumerate(keywords):
             print(i, key)
 
-    def list_note_keywords(self):
-        print("Note keywords in the paper: \n\t" + str(self))
-        keywords = []
-        for note in self.notes:
-            for word in note.keywords.split(", "):
-                keywords.append(word)
-        keywords = (list(set(keywords)))
-
-        for i, key in enumerate(keywords):
-            print(i, key)
-
     def add_a_quote(self):
         if not self.is_booklike:
             summary = input("Please input summary: ")
@@ -78,12 +66,6 @@ class Publication(object):
             pages = input("Pages of the quote, separated by '--': ")
             text = self._multi_input("Please input quote: ")
             self._new_quote(summary, keywords, pages, text)
-
-    def add_a_note(self):
-        summary = input("Please input summary: ")
-        keywords = input("Please input keywords, separated by ', ': ")
-        text = self._multi_input("Please input quote: ")
-        self._new_note(summary, keywords, text)
 
     def _lookup_short_identifier(self):
         if self.bibtex:
@@ -138,8 +120,6 @@ class Publication(object):
         self.bibtex = self._bibtex_from_record_without_quotes(",\n".join(value))
         if "quote" in self.fields:
             self._add_quotes_from_bibtex(self.fields["quote"])
-        if "note" in self.fields:
-            self._add_notes_from_bibtex(self.fields["note"])
 
     def _bibtex_from_record_without_quotes(self, value):
         nv = value.split("\tquote")[0]
@@ -151,18 +131,13 @@ class Publication(object):
         for q in array_of_quotes:
             self.quotes.append(main.Citation(q.split("__"), self, self.Biblio.keywords))
 
-    def _add_notes_from_bibtex(self, array_of_notes):
-        for q in array_of_notes:
-            self._new_note(q.split("__")[0], q.split("__")[1], q.split("__")[2])
-
     def as_bibtex_with_quotes(self):
         if self.bibtex:
             bibtex = self.bibtex
             bibtex = bibtex[:(len(bibtex)-2)]
             for q in self.quotes:
                 bibtex += "\n" + q._to_bibtex_string()
-            for n in self.notes:
-                 bibtex += "\n" + n._to_bibtex_string()
+
         else:
             bibtex = "@" + self.type_of_publication + "{" + self.short_identifier + "\n\tdoi = {" + self.doi + "},\n" \
                             "\tyear = {" + self.year + "},\n"\
@@ -172,8 +147,6 @@ class Publication(object):
                             "\tjournal = {" + self.journal + "},"
             for q in self.quotes:
                 bibtex += "\n" + q._to_bibtex_string()
-            for n in self.notes:
-                bibtex += "\n" + n._to_bibtex_string()
         bibtex += "\n}\n"
         return bibtex
 
@@ -183,10 +156,6 @@ class Publication(object):
         else:
             new_quote = main.Citation([summary, keywords, ".", text], self, self.Biblio.keywords)
         self.quotes.append(new_quote)
-
-    def _new_note(self, summary, keywords, text):
-        new_note = main.Note([summary, keywords, ".", text], self, self.Biblio.note_keywords)
-        self.notes.append(new_note)
 
     def _multi_input(self, prompt):
         print(prompt)
@@ -199,32 +168,14 @@ class Publication(object):
                 input_list.append(input_str)
         return " ".join(input_list)
 
-    def remove_note(self, index_of_note):
-        new_list_of_notes = []
-        for i, note in enumerate(self.notes):
-            if i == index_of_note:
-                erase_this = (input("Do you really want to erase the note \"" + self.notes[i].summary + "\"? (y/n)" ) == "y")
-                if not erase_this:
-                    new_list_of_notes.append(note)
-            else:
-                new_list_of_notes.append(note)
-        self.notes = new_list_of_notes
-
-    def list_notes(self):
-        for i, note in enumerate(self.notes):
-            print(i, note._in_list())
-
     def list_quotes(self):
         for i, quote in enumerate(self.quotes):
             print(i, quote._in_list())
 
-##from here on, this is more experimental
-
     def add_a_quote_complex(self):
-        # This is a more elaborate function to add quotes to the Publication - with an easy spelling corrector. These
+        # This is a more elaborate function to add quotes to the Publication - with a simple spelling corrector. These
         # additions make it neccesary to add the keywords one-by-one.
         summary = input("Please input summary: ")
-        #keywords = []
 
         keywords = self._keywords_from_summary(summary)
         keywords = self._keywords_from_input(keywords)
