@@ -1,7 +1,6 @@
 import main
 from tqdm import tqdm
 
-#TODO: Wenn ein Fehler geworfen wird beim added eines papers, dann wird das letzte paper zurückgegeben und landet mehrfach im Netzwerk.
 class BookshelfOfShame(main.BrainModule):
     def __init__(self, location, data, source = "file"):
         if source == "file":
@@ -99,13 +98,11 @@ class BookshelfOfShame(main.BrainModule):
 
 
     def save_to_location(self, location):
-        #TODO: Remove commented lines
-        #self.shame_bib.export_as_bibtex(location, verbose=False)
         print("Saving the bookshelf of shame... ")
         self.shame_bib.export_as_bibtex(location)
         handle = open(location, "a")
         handle.write("##")
-        #for part in self.citation_graph:
+
         for part in tqdm(self.citation_graph, desc="Saving the citation graph... ", unit=" ",
                           bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} lines\n"):
             if part is None:
@@ -148,6 +145,7 @@ class BookshelfOfShame(main.BrainModule):
         while doi:
             if str(doi) == "True":
                 self.shame_bib.add_a_publication()
+
             else:
                 self.shame_bib.add_publication_with_doi(doi)
             if self.shame_bib.latest_paper != self.shame_bib.publications[len(self.shame_bib.publications) - 2]:
@@ -155,6 +153,8 @@ class BookshelfOfShame(main.BrainModule):
                     print("Already in the motherbib.")
                     del self.shame_bib.publications[-1]
                     self.shame_bib.latest_paper = self.shame_bib.publications[-2]
+                elif self.shame_bib.latest_paper in self.citation_graph[paper]:
+                    print("Already in this citation graph.")
                 else:
                     print(self.shame_bib.latest_paper)
                     self.citation_graph[paper].append(self.shame_bib.latest_paper)
@@ -167,8 +167,6 @@ class BookshelfOfShame(main.BrainModule):
 
     def add_paper(self, paper):
         self.find_and_remove_paper(paper)
-        #TODO: Do I really need this "save"?
-        #self.save()
 
 
     def add_without_mother(self, paper):
@@ -181,4 +179,4 @@ class BookshelfOfShame(main.BrainModule):
 
 
 
-#TODO: Sometimes, this just doesn't write a paper to the bos...
+

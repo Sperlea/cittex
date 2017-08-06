@@ -17,7 +17,7 @@ from isbnlib.registry import bibformatters
 from textblob import TextBlob as tb
 from tqdm import tqdm
 import math
-
+import inspect
 
 class Library(object):
     def __init__(self, papers, keywords, loc):
@@ -126,6 +126,7 @@ class Library(object):
 
     def export_as_bibtex(self, location, verbose = True):
         handle = open(location, "w")
+        #TODO: Use tqdm instead of all print statements
         for paper in tqdm(self.publications, desc = "Saving as BIBTEX... ", unit = " paper", disable = not verbose,
             bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} paper\n"):
             handle.write(paper.as_bibtex_with_quotes())
@@ -448,3 +449,14 @@ def open_empty_library(location = None, key = Keywords()):
 
 def caseless_equal(left, right):
     return unicodedata.normalize("NFKD", left.casefold()) == unicodedata.normalize("NFKD", right.casefold())
+
+# store builtin print
+old_print = print
+def new_print(*args, **kwargs):
+    # if tqdm.tqdm.write raises error, use builtin print
+    try:
+        tqdm.write(*args, **kwargs)
+    except:
+        old_print(*args, ** kwargs)
+# globaly replace print with new_print
+inspect.builtins.print = new_print

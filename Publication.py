@@ -374,7 +374,6 @@ class InBook(Publication):
     def __init__(self, value, type_of_input, biblio):
        super(InBook, self).__init__(value, type_of_input, biblio, self.required_fields, self.optional_fields)
 
-
 class incollection(Publication):
     required_fields = ["author", "title", "booktitle", "year"]
     optional_fields = ["editor", "pages", "organization", "publisher", "address", "month", "key"]
@@ -383,8 +382,6 @@ class incollection(Publication):
 
     def __init__(self, value, type_of_input, biblio):
         super(incollection, self).__init__(value, type_of_input, biblio, self.required_fields, self.optional_fields)
-
-
 
 class misc(Publication):
     required_fields = ["title", "year", "author"]
@@ -397,3 +394,4 @@ class misc(Publication):
 
 
         super(misc, self).__init__(value, type_of_input, biblio, self.required_fields, self.optional_fields)
+
